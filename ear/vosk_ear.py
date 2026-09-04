@@ -38,6 +38,8 @@ _live_rec = None
 
 
 UI_PATH = Path(__file__).resolve().parent / "ui.html"
+HOUSING_PATH = Path(__file__).resolve().parent / "filament-housing.html"
+BARE_PATH = Path(__file__).resolve().parent / "filament.html"
 
 
 def seat_model():
@@ -275,8 +277,8 @@ class Ear(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    def _html(self) -> None:
-        page = UI_PATH.read_text(encoding="utf-8") if UI_PATH.is_file() else "<p>UI missing.</p>"
+    def _html(self, path: Path) -> None:
+        page = path.read_text(encoding="utf-8") if path.is_file() else "<p>UI missing.</p>"
         raw = page.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -294,8 +296,14 @@ class Ear(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
-        if path in ("/", "/ui", "/live.html"):
-            self._html()
+        if path in ("/", "/ui", "/housing", "/live.html"):
+            self._html(HOUSING_PATH if HOUSING_PATH.is_file() else UI_PATH)
+            return
+        if path in ("/bare", "/frozen"):
+            self._html(BARE_PATH)
+            return
+        if path in ("/simple",):
+            self._html(UI_PATH)
             return
         if path in ("/health", "/stt", "/live"):
             seated = seat_model() is not None
