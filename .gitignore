@@ -6,3 +6,4 @@ node_modules/
 models/
 vosk-model*/
 *.zip
+__pycache__/
