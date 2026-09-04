@@ -34,7 +34,14 @@
     font-size:11px;color:var(--dim);text-shadow:0 0 12px #000;pointer-events:auto}
   #carbon b{color:var(--hot);font-weight:400;letter-spacing:.14em;text-transform:uppercase}
   #carbon li{margin:6px 0;color:var(--paper);list-style:none}
-  #carbon .conf{color:var(--hot)}
+  #map{position:fixed;left:18px;bottom:18px;z-index:20;max-width:22rem;max-height:46vh;overflow:auto;
+    font-size:11px;color:var(--paper);text-shadow:0 0 12px #000}
+  #map b{display:block;margin-bottom:8px;color:var(--hot);font-weight:400;letter-spacing:.14em;text-transform:uppercase}
+  #map label{display:flex;align-items:center;gap:8px;margin:5px 0;cursor:pointer;color:var(--dim)}
+  #map label.on{color:var(--paper)}
+  #map input{accent-color:var(--tiff)}
+  #region{max-width:18rem;text-align:right;color:var(--hot)}
+
 
 </style>
 </head>
@@ -47,6 +54,7 @@
     <a href="/live.html" data-view="/live.html">Live</a>
   </nav>
   <button id="train" type="button" aria-pressed="true">Train</button>
+  <button id="speak" type="button" aria-pressed="true">Speak</button>
   <div class="st" id="region">training · Kentucky</div>
   <label class="sr" for="mic">Mic</label>
   <select id="mic" aria-label="Microphone">
@@ -61,7 +69,11 @@
   <p>not sure. set aside.</p>
   <ul id="carbon-list"></ul>
 </div>
+<div id="map">
+  <b>Dialect map</b>
+</div>
 <div id="as-said"></div>
+<script src="/dialect-map.js"></script>
 <script>
 (function(){
   const EAR = location.port === '4850' ? '' : 'http://127.0.0.1:4850';
@@ -72,6 +84,49 @@
   const trainBtn = document.getElementById('train');
   const links = [...document.querySelectorAll('.views a')];
   window.filamentTrain = true;
+  window.filamentMute = false;
+
+  const mapBox = document.getElementById('map');
+  const tour = window.FILAMENT_TOUR || [];
+  const regions = window.FILAMENT_MAP || [];
+  regions.forEach((pack) => {
+    const lab = document.createElement('label');
+    const on = !tour.length || tour.includes(pack.key);
+    lab.className = on ? 'on' : '';
+    lab.innerHTML = '<input type="checkbox" value="'+pack.key+'"'+(on?' checked':'')+'> '+pack.label;
+    mapBox.appendChild(lab);
+  });
+  function selectedKeys(){
+    return [...mapBox.querySelectorAll('input:checked')].map((el) => el.value);
+  }
+  function pushMap(){
+    const keys = selectedKeys();
+    [...mapBox.querySelectorAll('label')].forEach((lab) => {
+      lab.classList.toggle('on', lab.querySelector('input').checked);
+    });
+    const w = frameWin();
+    if (w && w.FILAMENT_SET_ENABLED) w.FILAMENT_SET_ENABLED(keys);
+    if (window.FILAMENT_SET_ENABLED) window.FILAMENT_SET_ENABLED(keys);
+  }
+  mapBox.addEventListener('change', pushMap);
+
+  const speakBtn = document.getElementById('speak');
+  speakBtn.addEventListener('click', () => {
+    window.filamentMute = !window.filamentMute;
+    speakBtn.setAttribute('aria-pressed', window.filamentMute ? 'false' : 'true');
+    const w = frameWin();
+    if (w) w.filamentMute = window.filamentMute;
+    if (window.filamentMute && window.speechSynthesis) window.speechSynthesis.cancel();
+  });
+
+  window.addEventListener('message', (ev) => {
+    const data = ev.data || {};
+    if (data.type !== 'filament-token') return;
+    const el = document.getElementById('region');
+    if (el && data.region) el.textContent = 'training · ' + data.region;
+    if (!window.filamentTrain || window.filamentMute) return;
+    if (window.FILAMENT_SPEAK) window.FILAMENT_SPEAK(data.token, data.lang);
+  });
 
   function frameWin(){
     try { return stage.contentWindow; } catch { return null; }
@@ -85,9 +140,19 @@
     trainBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
     const w = frameWin();
     if (w) w.filamentTrain = on;
+    if (on) {
+      try { window.speechSynthesis && window.speechSynthesis.getVoices(); } catch (_e) {}
+      pushMap();
+      if (!window.filamentMute && window.FILAMENT_SPEAK) window.FILAMENT_SPEAK("training", "en-US");
+    } else if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
   }
   trainBtn.addEventListener('click', () => setTrain(window.filamentTrain === false));
-  stage.addEventListener('load', () => setTrain(window.filamentTrain !== false));
+  stage.addEventListener('load', () => {
+    setTrain(window.filamentTrain !== false);
+    pushMap();
+  });
   setInterval(() => {
     const w = frameWin();
     const el = document.getElementById('region');

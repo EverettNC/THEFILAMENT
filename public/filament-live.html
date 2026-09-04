@@ -275,8 +275,21 @@
       x.fillText(L.text, L.x + 6, L.y);
     }
 
-    if(!window.filamentLive && window.filamentTrain!==false && Math.random()<0.03){
-      spawn((window.FILAMENT_NEXT_TOKEN && window.FILAMENT_NEXT_TOKEN()) || "y'all");
+    if(!window.filamentLive && window.filamentTrain!==false){
+      const busy = window !== window.top
+        ? performance.now() < (window.filamentNextAt || 0)
+        : (window.FILAMENT_BUSY ? window.FILAMENT_BUSY() : false);
+      if(!busy){
+        const tok = (window.FILAMENT_NEXT_TOKEN && window.FILAMENT_NEXT_TOKEN()) || "y'all";
+        window.filamentNextAt = performance.now() + 1200;
+        spawn(tok);
+        const lang = window.filamentLang || (window.FILAMENT_LANG_FOR && window.FILAMENT_LANG_FOR(tok)) || "en-US";
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: "filament-token", token: tok, region: window.filamentRegion, lang: lang }, "*");
+        } else if (window.FILAMENT_SPEAK) {
+          window.FILAMENT_SPEAK(tok, lang);
+        }
+      }
     }
 
     requestAnimationFrame(tick);
