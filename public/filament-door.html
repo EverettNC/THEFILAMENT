@@ -29,7 +29,13 @@
   #level{width:10rem;height:6px;background:#1a222c;border:1px solid var(--dim)}
   #level>i{display:block;height:100%;width:0;background:var(--catch)}
 
-  #as-said .partial{color:var(--dim);font-style:italic}
+  #as-said .unsure{color:var(--hot);border-bottom:1px dashed var(--hot)}
+  #carbon{position:fixed;left:18px;top:18px;z-index:20;max-width:18rem;max-height:42vh;overflow:auto;
+    font-size:11px;color:var(--dim);text-shadow:0 0 12px #000;pointer-events:auto}
+  #carbon b{color:var(--hot);font-weight:400;letter-spacing:.14em;text-transform:uppercase}
+  #carbon li{margin:6px 0;color:var(--paper);list-style:none}
+  #carbon .conf{color:var(--hot)}
+
 </style>
 </head>
 <body>
@@ -48,6 +54,11 @@
   <button id="btn" type="button" disabled>Hold</button>
   <div id="level" aria-hidden="true"><i id="level-bar"></i></div>
   <div class="st" id="st">probing ear</div>
+</div>
+<div id="carbon" hidden>
+  <b>Carbon</b>
+  <p>not sure. set aside.</p>
+  <ul id="carbon-list"></ul>
 </div>
 <div id="as-said"></div>
 <script>
@@ -86,10 +97,34 @@
     });
   });
 
-  function showSaid(text, partial){
+  function showSaid(text, partial, unsure){
     const s = String(text||'').trim();
-    said.innerHTML = s ? (partial ? '<span class="partial">'+s+'</span>' : s) : '';
+    if(!s){ said.innerHTML=''; return; }
+    const mark = (unsure && unsure.length)
+      ? s.replace(/(\S+)/g, (tok) => {
+          const hit = unsure.some((u) => (u.raw||u.text||'').toLowerCase() === tok.toLowerCase() || (u.text||'').toLowerCase()===tok.toLowerCase());
+          return hit ? '<span class="unsure">'+tok+'</span>' : tok;
+        }).replace(/<\/span> <span class="unsure">/g, ' ')
+      : s;
+    said.innerHTML = partial ? '<span class="partial">'+mark+'</span>' : mark;
   }
+  function drawCarbon(aside){
+    const box = document.getElementById('carbon');
+    const list = document.getElementById('carbon-list');
+    if(!box || !list) return;
+    const rows = aside || [];
+    box.hidden = rows.length === 0;
+    list.innerHTML = rows.slice(0,12).map((r) => {
+      const w = r.word || r.kept || '';
+      const c = (r.conf!=null) ? Number(r.conf).toFixed(2) : '?';
+      return '<li>'+w+' <span class="conf">'+c+'</span></li>';
+    }).join('');
+  }
+  function pullCarbon(){
+    fetch(EAR+'/carbon').then(r=>r.json()).then((b)=>{ if(b.ok) drawCarbon(b.aside); }).catch(()=>{});
+  }
+  pullCarbon();
+  setInterval(pullCarbon, 2500);
   let listening=false, ctx, stream, proc, queue=Promise.resolve(), seen=0;
   function emit(text){
     const toks = String(text||'').trim().split(/\s+/).filter(Boolean);
@@ -111,10 +146,12 @@
       if(!body.ok){ st.textContent=body.error||'ear failed'; return; }
       if(body.final && body.text && body.text.trim()){
         emit(body.text);
-        showSaid(body.text, false);
+        showSaid(body.text, false, body.unsure);
         seen=0;
+        if(body.carbon) pullCarbon();
       } else {
         emit(body.partial||'');
+        showSaid(body.partial||'', true, body.unsure);
       }
     });
     return queue;

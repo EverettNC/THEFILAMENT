@@ -16,6 +16,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
+from mouth import CONF_FLOOR, dress, load_carbon, save_carbon, shape_words
+
 DOOR = int(os.environ.get("FILAMENT_EAR_PORT", "4850"))
 HOME_MODEL = "/Users/EverettN/Downloads/vosk-model-en-us-0.22-lgraph"
 HOME_UNZIP = "/Users/EverettN/models/vosk-model-en-us-0.22-lgraph"
@@ -127,55 +129,39 @@ def hear(pcm: bytes) -> dict:
         return {"ok": False, "error": _model_error, "seated": False}
     rec = KaldiRecognizer(model, 16000)
     rec.SetWords(True)
+    try:
+        rec.SetMaxAlternatives(5)
+    except Exception:  # noqa: BLE001
+        pass
     chunk = 4000
     for i in range(0, len(pcm), chunk):
         rec.AcceptWaveform(pcm[i : i + chunk])
     final = json.loads(rec.FinalResult() or "{}")
     text = (final.get("text") or "").strip()
-    words = []
-    for w in final.get("result") or []:
-        if not isinstance(w, dict):
-            continue
-        tok = str(w.get("word") or "").strip()
-        if not tok:
-            continue
-        words.append(
-            {
-                "text": tok,
-                "start": float(w.get("start") or 0),
-                "end": float(w.get("end") or 0),
-            }
-        )
-    return {
-        "ok": True,
-        "text": text,
-        "transcript": text,
-        "words": words,
-        "duration": len(pcm) / (16000 * 2),
-        "language": "en",
-        "engine": "vosk",
-        "organ": "filament",
-        "cloud": False,
-        "seated": True,
-    }
+    if not text:
+        alts = final.get("alternatives") or []
+        if alts and isinstance(alts[0], dict):
+            text = str(alts[0].get("text") or "").strip()
+    words = shape_words(final)
+    return dress(
+        {
+            "ok": True,
+            "text": text,
+            "transcript": text,
+            "words": words,
+            "duration": len(pcm) / (16000 * 2),
+            "language": "en",
+            "engine": "vosk",
+            "organ": "filament",
+            "cloud": False,
+            "seated": True,
+        },
+        final,
+    )
 
 
 def words_from(payload: dict) -> list[dict]:
-    words = []
-    for w in payload.get("result") or payload.get("partial_result") or []:
-        if not isinstance(w, dict):
-            continue
-        tok = str(w.get("word") or "").strip()
-        if not tok:
-            continue
-        words.append(
-            {
-                "text": tok,
-                "start": float(w.get("start") or 0),
-                "end": float(w.get("end") or 0),
-            }
-        )
-    return words
+    return shape_words(payload)
 
 
 def live_hear(pcm: bytes, reset: bool = False, end: bool = False) -> dict:
@@ -193,49 +179,62 @@ def live_hear(pcm: bytes, reset: bool = False, end: bool = False) -> dict:
             _live_rec.SetPartialWords(True)
         except Exception:  # noqa: BLE001
             pass
+        try:
+            _live_rec.SetMaxAlternatives(5)
+        except Exception:  # noqa: BLE001
+            pass
     if end:
         final = json.loads(_live_rec.FinalResult() or "{}")
         _live_rec = None
         text = (final.get("text") or "").strip()
-        return {
-            "ok": True,
-            "final": True,
-            "text": text,
-            "partial": "",
-            "words": words_from(final),
-            "engine": "vosk",
-            "organ": "filament",
-            "cloud": False,
-            "seated": True,
-        }
+        return dress(
+            {
+                "ok": True,
+                "final": True,
+                "text": text,
+                "partial": "",
+                "words": words_from(final),
+                "engine": "vosk",
+                "organ": "filament",
+                "cloud": False,
+                "seated": True,
+            },
+            final,
+        )
     if not pcm:
         return {"ok": True, "final": False, "text": "", "partial": "", "words": [], "seated": True}
     if _live_rec.AcceptWaveform(pcm):
         result = json.loads(_live_rec.Result() or "{}")
         text = (result.get("text") or "").strip()
-        return {
+        return dress(
+            {
+                "ok": True,
+                "final": True,
+                "text": text,
+                "partial": "",
+                "words": words_from(result),
+                "engine": "vosk",
+                "organ": "filament",
+                "cloud": False,
+                "seated": True,
+            },
+            result,
+        )
+    partial = json.loads(_live_rec.PartialResult() or "{}")
+    return dress(
+        {
             "ok": True,
-            "final": True,
-            "text": text,
-            "partial": "",
-            "words": words_from(result),
+            "final": False,
+            "text": "",
+            "partial": (partial.get("partial") or "").strip(),
+            "words": words_from(partial),
             "engine": "vosk",
             "organ": "filament",
             "cloud": False,
             "seated": True,
-        }
-    partial = json.loads(_live_rec.PartialResult() or "{}")
-    return {
-        "ok": True,
-        "final": False,
-        "text": "",
-        "partial": (partial.get("partial") or "").strip(),
-        "words": words_from(partial),
-        "engine": "vosk",
-        "organ": "filament",
-        "cloud": False,
-        "seated": True,
-    }
+        },
+        partial,
+    )
 
 
 def extract_file(headers: dict[str, str], body: bytes) -> bytes:
@@ -330,8 +329,13 @@ class Ear(BaseHTTPRequestHandler):
                     "housing": "v2",
                     "wholeHouse": False,
                     "live": True,
+                    "carbonFloor": CONF_FLOOR,
                 },
             )
+            return
+        if path in ("/carbon",):
+            pile = load_carbon()
+            self._json(200, {"ok": True, "for": "Carbon", "count": len(pile), "aside": pile})
             return
         self._json(404, {"ok": False, "error": "Not this nerve."})
 
@@ -339,8 +343,12 @@ class Ear(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         query = urlparse(self.path).query
         params = dict(part.split("=", 1) if "=" in part else (part, "1") for part in query.split("&") if part)
-        if path not in ("/", "/stt", "/transcribe", "/live"):
+        if path not in ("/", "/stt", "/transcribe", "/live", "/carbon"):
             self._json(404, {"ok": False, "error": "Not this nerve."})
+            return
+        if path == "/carbon":
+            save_carbon([])
+            self._json(200, {"ok": True, "for": "Carbon", "count": 0, "aside": []})
             return
         if seat_model() is None:
             self._json(503, {"ok": False, "seated": False, "error": _model_error, "engine": "vosk"})
