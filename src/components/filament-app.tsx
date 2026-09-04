@@ -291,7 +291,7 @@ export function FilamentApp() {
           The Filament
         </h1>
         <p className="mt-3 max-w-sm text-pretty font-sans text-sm leading-snug text-dim">
-          Millions of micro-fibers, electrified. Everything inside fifteen feet has to come
+          Millions of micro-fibers. Everything inside fifteen feet has to come
           through them. Every syllable gets grabbed — not just the ones a model was trained on.
         </p>
       </header>
@@ -345,15 +345,11 @@ export function FilamentApp() {
         <ul className="mt-3 hidden leading-6 md:block">
           <li>
             <i className="mr-2 inline-block size-2 rounded-full bg-wire align-middle" />
-            filament at rest
+            filament — always blue
           </li>
           <li>
-            <i className="mr-2 inline-block size-2 rounded-full bg-hot align-middle" />
-            electrified — carrying charge
-          </li>
-          <li>
-            <i className="mr-2 inline-block size-2 rounded-full bg-catch align-middle" />
-            syllable grabbed
+            <i className="mr-2 inline-block size-2 rounded-full align-middle" style={{ background: "#e07040" }} />
+            words — cayenne
           </li>
         </ul>
       </div>
