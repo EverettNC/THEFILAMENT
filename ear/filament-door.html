@@ -225,7 +225,7 @@
       if(!listening) return;
       const next=downsample(ev.inputBuffer.getChannelData(0), ctx.sampleRate);
       const merged=new Int16Array(carry.length+next.length); merged.set(carry); merged.set(next,carry.length);
-      let off=0; while(merged.length-off>=3200){ post(merged.slice(off,off+3200)); off+=3200; }
+      let off=0; while(merged.length-off>=8000){ post(merged.slice(off,off+8000)); off+=8000; }
       carry=merged.slice(off);
     };
     const mute=ctx.createGain(); mute.gain.value=0;

@@ -121,6 +121,9 @@ def to_pcm16_mono_16k(raw: bytes) -> tuple[bytes, float]:
                 pass
 
 
+SILENCE_TAIL = b"\x00" * (16000 * 2 // 2)  # 0.5s. Last word needs room to align.
+
+
 def hear(pcm: bytes) -> dict:
     from vosk import KaldiRecognizer, SetLogLevel  # type: ignore
 
@@ -130,13 +133,10 @@ def hear(pcm: bytes) -> dict:
         return {"ok": False, "error": _model_error, "seated": False}
     rec = KaldiRecognizer(model, 16000)
     rec.SetWords(True)
-    try:
-        rec.SetMaxAlternatives(5)
-    except Exception:  # noqa: BLE001
-        pass
+    padded = pcm + SILENCE_TAIL
     chunk = 4000
-    for i in range(0, len(pcm), chunk):
-        rec.AcceptWaveform(pcm[i : i + chunk])
+    for i in range(0, len(padded), chunk):
+        rec.AcceptWaveform(padded[i : i + chunk])
     final = json.loads(rec.FinalResult() or "{}")
     text = (final.get("text") or "").strip()
     if not text:
@@ -176,15 +176,13 @@ def live_hear(pcm: bytes, reset: bool = False, end: bool = False) -> dict:
     if reset or _live_rec is None:
         _live_rec = KaldiRecognizer(model, 16000)
         _live_rec.SetWords(True)
-        try:
-            _live_rec.SetPartialWords(True)
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            _live_rec.SetMaxAlternatives(5)
-        except Exception:  # noqa: BLE001
-            pass
+        # No SetPartialWords. No SetMaxAlternatives.
+        # Those force word-align on a short lattice and Kaldi discards the last word.
     if end:
+        try:
+            _live_rec.AcceptWaveform(SILENCE_TAIL)
+        except Exception:  # noqa: BLE001
+            pass
         final = json.loads(_live_rec.FinalResult() or "{}")
         _live_rec = None
         text = (final.get("text") or "").strip()
