@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 DOOR = int(os.environ.get("FILAMENT_EAR_PORT", "4850"))
 MODEL_PATH = os.environ.get(
     "VOSK_MODEL_PATH",
-    str(Path(__file__).resolve().parent.parent / "models" / "vosk-model-small-en-us-0.15"),
+    str(Path(__file__).resolve().parent.parent / "models" / "vosk-model-en-us-0.22-lgraph"),
 )
 
 _model = None
