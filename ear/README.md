@@ -6,12 +6,16 @@ Model: **vosk-model-en-us-0.22-lgraph**
 Accurate universal English (callcenter + wideband). Appen Kaldi. Dynamic graph.  
 Not the small 0.15. Whisper is not in this body.
 
+On Everett's machine the model already lives unpacked:
+
+```
+/Users/EverettN/Downloads/vosk-model-en-us-0.22-lgraph
+```
+
+The ear looks there first, then `./models/…`, then `VOSK_MODEL_PATH`.
+
 ```bash
 pip install vosk
-mkdir -p models
-curl -L -o /tmp/vosk.zip https://alphacephei.com/vosk/models/vosk-model-en-us-0.22-lgraph.zip
-unzip /tmp/vosk.zip -d models
-export VOSK_MODEL_PATH="$PWD/models/vosk-model-en-us-0.22-lgraph"
 python3 ear/vosk_ear.py
 ```
 

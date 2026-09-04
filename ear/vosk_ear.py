@@ -17,10 +17,19 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 DOOR = int(os.environ.get("FILAMENT_EAR_PORT", "4850"))
-MODEL_PATH = os.environ.get(
-    "VOSK_MODEL_PATH",
-    str(Path(__file__).resolve().parent.parent / "models" / "vosk-model-en-us-0.22-lgraph"),
-)
+HOME_MODEL = "/Users/EverettN/Downloads/vosk-model-en-us-0.22-lgraph"
+REPO_MODEL = str(Path(__file__).resolve().parent.parent / "models" / "vosk-model-en-us-0.22-lgraph")
+
+
+def resolve_model_path() -> str:
+    env = (os.environ.get("VOSK_MODEL_PATH") or "").strip()
+    for candidate in (env, HOME_MODEL, REPO_MODEL):
+        if candidate and Path(candidate).is_dir():
+            return candidate
+    return env or HOME_MODEL
+
+
+MODEL_PATH = resolve_model_path()
 
 _model = None
 _model_error = None
