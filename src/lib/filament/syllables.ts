@@ -1,86 +1,128 @@
 /**
  * Tokens a default English model tends to shave, flatten, or "correct."
- * Used as STT keyterm bias and as idle catch-particles in the field.
+ * US map: Louisiana Creole through Florida Cracker, Chinatown, Vegas,
+ * Taiwanese, Thai, Seattle, Minnesota, Moab, Texas, Tennessee, Kentucky,
+ * Brooklyn, the Bronx. Idle spawn and Stimulate build the library fast.
  */
-export const SYLLABLES = [
-  "y'all",
-  "ain't",
-  "cain't",
-  "might could",
-  "fixin'",
-  "yonder",
-  "holler",
-  "reckon",
-  "cher",
-  "lagniappe",
-  "couyon",
-  "envie",
-  "boudin",
-  "makin'",
-  "ova",
-  "dere",
-  "dat",
-  "dis",
-  "sha",
-  "bruh",
-  "aiight",
-  "irie",
-  "wagwan",
-  "yute",
-  "mon",
-  "ting",
-  "likkle",
-  "madonn'",
-  "gabagool",
-  "oobatz",
-  "aggita",
-  "sfogliatell'",
-  "fuhgeddabou",
-  "tak",
-  "dobre",
-  "czesc",
-  "dziekuje",
-  "prosze",
-  "dobrý",
-  "ahoj",
-  "tak-tak",
-  "budь",
-  "dyakuyu",
-  "pryvit",
-  "ni-hao",
-  "xie-xie",
-  "dui",
-  "hao",
-  "ma",
-  "arigatō",
-  "hai",
-  "sō-desu",
-  "eeto",
-  "ano",
-  "chotto",
-  "eh",
-  "aye",
-  "naw",
-  "shoot",
-  "lawd",
-  "bless",
-  "hun",
-  "sugar",
-  "darlin'",
-  "buddy",
-  "pardner",
-  "fella",
-  "ma'am",
-  "kiddo",
-  "finna",
-  "gonna",
-  "wanna",
-  "yous",
-  "over yonder",
-  "bless your heart",
-] as const;
 
-export const KEYTERMS: string[] = [...SYLLABLES].filter((s) => s.length <= 50).slice(0, 100);
+export const DIALECT_MAP = {
+  louisiana: {
+    label: "Louisiana Creole",
+    tokens: [
+      "cher",
+      "sha",
+      "lagniappe",
+      "couyon",
+      "envie",
+      "boudin",
+      "who dat",
+      "yeah you right",
+      "fais-dodo",
+      "pirogue",
+      "bayou",
+      "gumbo",
+      "zydeco",
+      "ova",
+      "dere",
+      "dat",
+      "dis",
+    ],
+  },
+  florida: {
+    label: "Florida Cracker",
+    tokens: ["y'all", "ain't", "cain't", "fixin'", "yonder", "reckon", "might could", "palmetto", "gator", "hammock", "swamp"],
+  },
+  chinatown: {
+    label: "LA Chinatown",
+    tokens: ["dim sum", "siu mai", "cha siu", "lai see", "m'goi", "ho sik", "ni-hao", "xie-xie", "hao"],
+  },
+  vegas: {
+    label: "Vegas",
+    tokens: ["the strip", "comped", "whale", "high roller", "tap out"],
+  },
+  taiwanese: {
+    label: "Taiwanese",
+    tokens: ["a-ma", "mei-you", "bubble", "night market", "la", "ni-hao", "hao"],
+  },
+  thai: {
+    label: "Thai",
+    tokens: ["sawasdee", "khrap", "ka", "nam prik", "pad krapow", "sabai"],
+  },
+  seattle: {
+    label: "Seattle",
+    tokens: ["the mountain", "drizzle", "the pass", "spendy", "you bet", "copacetic"],
+  },
+  minnesota: {
+    label: "Minnesota",
+    tokens: ["ope", "you betcha", "dontcha know", "uff-da", "hotdish", "yeah no", "no yeah"],
+  },
+  moab: {
+    label: "Moab",
+    tokens: ["slickrock", "mesa", "the trail", "wash", "hoodoo", "desert"],
+  },
+  texas: {
+    label: "Texas drawl",
+    tokens: ["howdy", "y'all", "fixin'", "over yonder", "darlin'", "pardner", "cain't", "might could", "all hat", "ma'am"],
+  },
+  tennessee: {
+    label: "Tennessee",
+    tokens: ["holler", "reckon", "yonder", "ain't", "mash", "nigh", "y'uns", "cain't", "bless"],
+  },
+  kentucky: {
+    label: "Kentucky",
+    tokens: ["holler", "y'uns", "nigh", "reckon", "poke", "yonder", "ain't", "mash"],
+  },
+  brooklyn: {
+    label: "Brooklyn",
+    tokens: ["madonn'", "gabagool", "fuhgeddabou", "oobatz", "bodega", "deadass", "yerr", "brick", "son"],
+  },
+  bronx: {
+    label: "the Bronx",
+    tokens: ["deadass", "bodega", "wallahi", "ock", "nahmean", "brick", "son", "fam", "good looks", "yerr"],
+  },
+  caribbean: {
+    label: "Caribbean US",
+    tokens: ["irie", "wagwan", "likkle", "yute", "mon", "ting", "bruh"],
+  },
+  hawaiian: {
+    label: "Hawaiian Pidgin",
+    tokens: ["da kine", "howzit", "pau", "mahalo", "bumbai"],
+  },
+} as const;
+
+export type DialectRegion = keyof typeof DIALECT_MAP;
+
+export const DIALECT_ORDER = Object.keys(DIALECT_MAP) as DialectRegion[];
+
+export function dialectTokens(): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const key of DIALECT_ORDER) {
+    for (const token of DIALECT_MAP[key].tokens) {
+      if (seen.has(token)) continue;
+      seen.add(token);
+      out.push(token);
+    }
+  }
+  return out;
+}
+
+export const SYLLABLES = dialectTokens();
+export const KEYTERMS: string[] = SYLLABLES.filter((s) => s.length <= 50).slice(0, 100);
+export const DIALECT_STIM = DIALECT_MAP.louisiana.tokens;
+
+let stimIndex = 0;
+
+export function nextDialectStim(): {
+  key: DialectRegion;
+  label: string;
+  tokens: readonly string[];
+} {
+  const key = DIALECT_ORDER[stimIndex % DIALECT_ORDER.length]!;
+  stimIndex += 1;
+  const pack = DIALECT_MAP[key];
+  return { key, label: pack.label, tokens: pack.tokens };
+}
 
 export const SAMPLE_CATCH = {
   text: "Y'all fixin' to come yonder to the holler? Cher, that's a lagniappe — ain't nobody cain't use a little extra. Bruh it was irie, a likkle ting. Madonn', the gabagool. Tak, děkuji. Ni-hao, xie-xie. Arigatō, chotto mate. Lawd have mercy, sugar.",
@@ -103,11 +145,8 @@ export const SAMPLE_CATCH = {
     "likkle",
     "madonn'",
     "gabagool",
-    "tak",
     "ni-hao",
     "xie-xie",
-    "arigatō",
-    "chotto",
     "lawd",
     "sugar",
   ],
@@ -124,33 +163,5 @@ export const SAMPLE_CATCH = {
     { text: "that's", start: 3.4, end: 3.65 },
     { text: "a", start: 3.66, end: 3.74 },
     { text: "lagniappe", start: 3.8, end: 4.5 },
-    { text: "ain't", start: 5.1, end: 5.4 },
-    { text: "nobody", start: 5.45, end: 5.85 },
-    { text: "cain't", start: 5.9, end: 6.25 },
-    { text: "use", start: 6.3, end: 6.5 },
-    { text: "a", start: 6.52, end: 6.6 },
-    { text: "little", start: 6.62, end: 6.9 },
-    { text: "extra.", start: 6.95, end: 7.4 },
-    { text: "Bruh", start: 8.0, end: 8.3 },
-    { text: "it", start: 8.32, end: 8.42 },
-    { text: "was", start: 8.44, end: 8.6 },
-    { text: "irie,", start: 8.65, end: 9.05 },
-    { text: "a", start: 9.1, end: 9.18 },
-    { text: "likkle", start: 9.2, end: 9.55 },
-    { text: "ting.", start: 9.58, end: 9.9 },
-    { text: "Madonn',", start: 10.3, end: 10.8 },
-    { text: "the", start: 10.85, end: 10.98 },
-    { text: "gabagool.", start: 11.0, end: 11.7 },
-    { text: "Tak,", start: 12.0, end: 12.25 },
-    { text: "děkuji.", start: 12.3, end: 12.75 },
-    { text: "Ni-hao,", start: 12.9, end: 13.25 },
-    { text: "xie-xie.", start: 13.3, end: 13.7 },
-    { text: "Arigatō,", start: 13.85, end: 14.4 },
-    { text: "chotto", start: 14.5, end: 14.85 },
-    { text: "mate.", start: 14.9, end: 15.2 },
-    { text: "Lawd", start: 15.5, end: 15.85 },
-    { text: "have", start: 15.9, end: 16.1 },
-    { text: "mercy,", start: 16.15, end: 16.55 },
-    { text: "sugar.", start: 16.6, end: 17.1 },
   ],
 } as const;

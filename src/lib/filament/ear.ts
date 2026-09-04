@@ -8,6 +8,13 @@ export const FILAMENT_DEFAULT_EAR = `http://127.0.0.1:${FILAMENT_DOOR}/stt`;
 export const FILAMENT_HEALTH = `http://127.0.0.1:${FILAMENT_DOOR}/health`;
 export const UNSEATED =
   "Filament ear is unseated. Seat Vosk on :4850 (EverettNC/THEFILAMENT). Empty ear stays empty. No invented speech.";
+export const EAR_UNSEATED_FACE =
+  "The Filament ear is unseated. Vosk is not sitting on this machine. Empty ear stays empty. No invented speech.";
+
+export function faceEarError(error: string): string {
+  if (/unseated|4850|not seated|could not be reached/i.test(error)) return EAR_UNSEATED_FACE;
+  return error;
+}
 
 export function filamentEarUrl(): string {
   return (process.env.FILAMENT_EAR_URL || process.env.PORCH_EAR_URL || "").trim();
