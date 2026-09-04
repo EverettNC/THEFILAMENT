@@ -37,6 +37,9 @@ _model_error = None
 _live_rec = None
 
 
+UI_PATH = Path(__file__).resolve().parent / "ui.html"
+
+
 def seat_model():
     global _model, _model_error
     if _model is not None:
@@ -272,6 +275,16 @@ class Ear(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def _html(self) -> None:
+        page = UI_PATH.read_text(encoding="utf-8") if UI_PATH.is_file() else "<p>UI missing.</p>"
+        raw = page.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(raw)
+
     def do_OPTIONS(self) -> None:  # noqa: N802
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -281,7 +294,10 @@ class Ear(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
-        if path in ("/", "/health", "/stt", "/live"):
+        if path in ("/", "/ui", "/live.html"):
+            self._html()
+            return
+        if path in ("/health", "/stt", "/live"):
             seated = seat_model() is not None
             self._json(
                 200,
