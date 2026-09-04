@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { KEYTERMS } from "./syllables";
-import type { SttWord, TranscribeResult } from "./types";
+import type { TranscribeResult } from "./types";
+import { filamentEarUrl, pickText, pickWords, probeFilamentEar, UNSEATED } from "./ear";
 
 type TranscribeInput = {
   audioBase64: string;
@@ -13,40 +14,11 @@ type TranscribeInput = {
 
 const MAX_B64 = 7_500_000;
 
-function localEarUrl(): string {
-  return (process.env.FILAMENT_EAR_URL || process.env.PORCH_EAR_URL || "").trim();
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
     return value as Record<string, unknown>;
   }
   return null;
-}
-
-function pickText(body: unknown): string | null {
-  const rec = asRecord(body);
-  if (!rec) return null;
-  if (typeof rec.text === "string") return rec.text;
-  if (typeof rec.transcript === "string") return rec.transcript;
-  if (typeof rec.asSaid === "string") return rec.asSaid;
-  return null;
-}
-
-function pickWords(body: unknown): SttWord[] {
-  const rec = asRecord(body);
-  const words = rec?.words;
-  if (!Array.isArray(words)) return [];
-  return words
-    .map((item) => asRecord(item))
-    .filter((w): w is Record<string, unknown> => Boolean(w))
-    .filter((w) => typeof w.text === "string" && w.text.trim())
-    .map((w) => ({
-      text: String(w.text),
-      start: Number(w.start ?? 0),
-      end: Number(w.end ?? 0),
-      speaker: typeof w.speaker === "number" ? w.speaker : undefined,
-    }));
 }
 
 function catchFromText(text: string): string[] {
@@ -57,12 +29,9 @@ function catchFromText(text: string): string[] {
 export const transcribeCatch = createServerFn({ method: "POST" })
   .validator((input: TranscribeInput) => input)
   .handler(async ({ data }): Promise<TranscribeResult> => {
-    const ear = localEarUrl();
-    if (!ear) {
-      return {
-        ok: false,
-        error: "The word-ear is not on this machine. No cloud ear. No invented speech.",
-      };
+    const probe = await probeFilamentEar(filamentEarUrl());
+    if (!probe.seated) {
+      return { ok: false, error: probe.error || UNSEATED };
     }
     if (!data.audioBase64 || data.audioBase64.length > MAX_B64) {
       return { ok: false, error: "That catch is too long. Keep it under a minute and a half." };
@@ -87,7 +56,7 @@ export const transcribeCatch = createServerFn({ method: "POST" })
 
     let body: unknown;
     try {
-      const res = await fetch(ear, { method: "POST", body: form });
+      const res = await fetch(probe.ear, { method: "POST", body: form });
       const raw = await res.text();
       try {
         body = JSON.parse(raw) as unknown;
@@ -108,7 +77,7 @@ export const transcribeCatch = createServerFn({ method: "POST" })
 
     const rawText = (pickText(body) ?? "").trim();
     if (!rawText) {
-      return { ok: false, error: "The fibers did not catch speech. Try closer to the mic." };
+      return { ok: false, error: "The fibers did not catch speech. Empty ear stays empty." };
     }
 
     const words = pickWords(body);
@@ -125,7 +94,7 @@ export const transcribeCatch = createServerFn({ method: "POST" })
       language,
       duration,
       words,
-      register: null,
+      register: rec && rec.engine === "vosk" ? "vosk" : null,
       caught,
     };
   });
