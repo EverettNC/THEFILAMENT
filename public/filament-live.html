@@ -45,7 +45,9 @@
   radius <span class="n">15 ft</span> &nbsp;·&nbsp;
   filaments <span class="n" id="fcount">—</span> engaged
   of 2,600 rendered · millions in the organ &nbsp;·&nbsp;
-  caught <span class="n" id="scount">0</span>
+  caught <span class="n" id="scount">0</span> &nbsp;·&nbsp;
+  slipped <span class="n" id="miss">0</span> &nbsp;·&nbsp;
+  <span class="n" id="pct">—</span>
 </div>
 
 <div class="hud" id="legend">
@@ -63,6 +65,8 @@
   const c = document.getElementById('c'), x = c.getContext('2d');
   const fcountEl = document.getElementById('fcount');
   const scountEl = document.getElementById('scount');
+  const missEl = document.getElementById('miss');
+  const pctEl = document.getElementById('pct');
   let W=0,H=0,CX=0,CY=0,R=0,DPR=1;
 
   const SYL = [
@@ -81,7 +85,16 @@
   const fil = [];
   const syl = [];
   const labels = [];
-  let caught = 0, t = 0;
+  let caught = 0, slipped = 0, t = 0;
+
+  function report(){
+    const total=caught+slipped;
+    const pct=total?Math.round(100*caught/total):0;
+    scountEl.textContent=caught.toLocaleString();
+    if(missEl) missEl.textContent=slipped.toLocaleString();
+    if(pctEl) pctEl.textContent=total?pct+'%':'—';
+    window.filamentStats={caught,slipped,pct,total};
+  }
 
   function resize(){
     DPR = Math.min(window.devicePixelRatio||1, 2);
@@ -220,17 +233,20 @@
 
       if(!s.held && s.d < R*0.94){
         s.held = true; caught++;
-        scountEl.textContent = caught.toLocaleString();
+        report();
         labels.push({x:sx, y:sy, text:s.text, life:1.1});
       }
 
       x.strokeStyle = 'rgba(5,7,10,0.9)';
       x.lineWidth = halo;
       x.strokeText(s.text, sx + 6, sy + 4);
-      x.fillStyle = '#dfe9f2';
+      x.fillStyle = '#f8ff2a';
       x.fillText(s.text, sx + 6, sy + 4);
 
-      if(s.d < R*0.10) syl.splice(i,1);
+      if(s.d < R*0.10){
+        if(!s.held){ slipped++; report(); }
+        syl.splice(i,1);
+      }
     }
 
     for(let i=labels.length-1;i>=0;i--){
@@ -240,7 +256,7 @@
       x.strokeStyle = `rgba(5,7,10,${Math.min(1,L.life)*0.8})`;
       x.lineWidth = halo;
       x.strokeText(L.text, L.x + 6, L.y);
-      x.fillStyle = `rgba(223,233,242,${Math.min(1,L.life)})`;
+      x.fillStyle = `rgba(248,255,42,${Math.min(1,L.life)})`;
       x.fillText(L.text, L.x + 6, L.y);
     }
 

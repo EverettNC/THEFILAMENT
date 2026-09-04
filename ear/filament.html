@@ -23,8 +23,8 @@
   #readout .n{color:var(--catch);font-variant-numeric:tabular-nums}
   #legend{bottom:22px;right:24px;text-align:right;font-size:11px;color:var(--dim)}
   #legend span{display:inline-block;width:8px;height:8px;border-radius:9px;margin-right:6px;vertical-align:-1px}
-  .caught{position:fixed;pointer-events:none;font-size:11px;color:var(--catch);
-    text-shadow:0 0 10px rgba(138,255,193,.5);white-space:nowrap}
+  .caught{position:fixed;pointer-events:none;font-size:11px;color:#f8ff2a;
+    text-shadow:0 0 10px rgba(248,255,42,.5);white-space:nowrap}
   @media (max-width:640px){#title p{max-width:28ch}#legend{display:none}}
 </style>
 </head>
@@ -41,12 +41,14 @@
   <b>PORCH · super cochlea</b><br>
   radius <span class="n">15 ft</span> &nbsp;·&nbsp;
   filaments <span class="n" id="fcount">—</span> rendered of millions &nbsp;·&nbsp;
-  syllables caught <span class="n" id="scount">0</span>
+  caught <span class="n" id="scount">0</span> &nbsp;·&nbsp;
+  slipped <span class="n" id="miss">0</span> &nbsp;·&nbsp;
+  <span class="n" id="pct">—</span>
 </div>
 
 <div class="hud" id="legend">
   <span style="background:#7fe3ff"></span>filament at rest — blue<br>
-  <span style="background:#8affc1"></span>word passing — then back to blue
+  <span style="background:#f8ff2a"></span>word passing — then back to blue
 </div>
 
 <script>
@@ -54,27 +56,28 @@
   const c = document.getElementById('c'), x = c.getContext('2d');
   const fcountEl = document.getElementById('fcount');
   const scountEl = document.getElementById('scount');
+  const missEl = document.getElementById('miss');
+  const pctEl = document.getElementById('pct');
   let W=0,H=0,CX=0,CY=0,R=0,DPR=1;
 
   // Syllables from the map — creole, deep south, appalachian, slavic, east asian,
   // caribbean, italian-american, texan. What a default English model shaves off.
-  const SYL = [
-    "y'all","ain't","cain't","might","could","fixin'","yonder","holler","reckon",
-    "cher","lagniappe","couyon","envie","boudin","makin'","ova","dere","dat","dis",
-    "sha","bruh","aiight","irie","wagwan","yute","mon","ting","likkle",
-    "madonn'","gabagool","oobatz","aggita","sfogliatell'","fuhgeddabou",
-    "tak","dobre","czesc","dziekuje","prosze","dobrý","ahoj","tak-tak",
-    "budь","dyakuyu","pryvit","ni-hao","xie-xie","dui","hao","ma",
-    "arigatō","hai","sō-desu","eeto","ano","chotto",
-    "eh","aye","naw","shoot","lawd","bless","fixin","hun","sugar","darlin'",
-    "buddy","pardner","fella","ma'am","sir","kiddo","bud"
-  ];
+  const SYL = ["cher","sha","lagniappe","couyon","envie","boudin","who dat","yeah you right","fais-dodo","pirogue","bayou","gumbo","zydeco","ova","dere","dat","dis","y'all","ain't","cain't","fixin'","yonder","reckon","might could","palmetto","gator","hammock","swamp","dim sum","siu mai","cha siu","lai see","m'goi","ho sik","ni-hao","xie-xie","hao","the strip","comped","whale","high roller","tap out","a-ma","mei-you","bubble","night market","la","sawasdee","khrap","ka","nam prik","pad krapow","sabai","the mountain","drizzle","the pass","spendy","you bet","copacetic","ope","you betcha","dontcha know","uff-da","hotdish","yeah no","no yeah","slickrock","mesa","the trail","wash","hoodoo","desert","howdy","over yonder","darlin'","pardner","all hat","ma'am","holler","mash","nigh","y'uns","bless","poke","madonn'","gabagool","fuhgeddabou","oobatz","bodega","deadass","yerr","brick","son","wallahi","ock","nahmean","fam","good looks","irie","wagwan","likkle","yute","mon","ting","bruh","da kine","howzit","pau","mahalo","bumbai"];
 
   const FIL = 2600;                 // rendered stand-ins for millions
   const fil = [];
   const syl = [];
   const labels = [];
-  let caught = 0, t = 0;
+  let caught = 0, slipped = 0, t = 0;
+
+  function report(){
+    const total=caught+slipped;
+    const pct=total?Math.round(100*caught/total):0;
+    scountEl.textContent=caught.toLocaleString();
+    if(missEl) missEl.textContent=slipped.toLocaleString();
+    if(pctEl) pctEl.textContent=total?pct+'%':'—';
+    window.filamentStats={caught,slipped,pct,total};
+  }
 
   function resize(){
     DPR = Math.min(window.devicePixelRatio||1, 2);
@@ -165,16 +168,25 @@
       const sy = CY + Math.sin(s.a)*s.d;
 
       if(!s.held && s.d < R*0.94){
-        s.held = true; caught++;
-        scountEl.textContent = caught.toLocaleString();
-        // grab — no flash. field stays blue.
-        labels.push({x:sx, y:sy, text:s.text, life:1});
+        let grab = false;
+        for(let fi=0; fi<fil.length; fi++){
+          const f = fil[fi];
+          let dd = Math.abs(((f.a - s.a + Math.PI*3)%(Math.PI*2)) - Math.PI);
+          if(dd < 0.08 && s.d <= f.len * 1.04){ grab = true; break; }
+        }
+        if(grab){
+          s.held = true; caught++; report();
+          labels.push({x:sx, y:sy, text:s.text, life:1});
+        }
       }
 
-      x.fillStyle = s.held ? 'rgba(138,255,193,0.95)' : 'rgba(223,233,242,0.6)';
+      x.fillStyle = s.held ? 'rgba(248,255,42,0.95)' : 'rgba(223,233,242,0.6)';
       x.beginPath(); x.arc(sx,sy, s.held?2.1:1.4, 0, Math.PI*2); x.fill();
 
-      if(s.d < R*0.10) syl.splice(i,1);
+      if(s.d < R*0.10){
+        if(!s.held){ slipped++; report(); }
+        syl.splice(i,1);
+      }
     }
 
     // ---- what it caught, in plain text ----
@@ -183,17 +195,24 @@
       const L = labels[i];
       L.life -= 0.011; L.y -= 0.28;
       if(L.life <= 0){ labels.splice(i,1); continue; }
-      x.fillStyle = `rgba(138,255,193,${L.life*0.85})`;
+      x.fillStyle = `rgba(248,255,42,${L.life*0.85})`;
       x.fillText(L.text, L.x + 6, L.y);
     }
 
-    if(Math.random() < 0.16) spawn();
+    if(!window.filamentLive && Math.random() < 0.05) spawn();
     requestAnimationFrame(tick);
   }
 
   window.addEventListener('resize', resize);
   resize();
-  for(let i=0;i<14;i++) spawn();
+  for(let i=0;i<4;i++) spawn();
+  window.filamentCatch = function(text){
+    const tok = String(text||'').trim();
+    if(!tok) return;
+    const a = Math.random()*Math.PI*2;
+    const d = R*(1.02 + Math.random()*0.22);
+    syl.push({ a, d, text:tok, v: 1.1 + Math.random()*0.6, held:false, hue:Math.random() });
+  };
   tick();
 })();
 </script>

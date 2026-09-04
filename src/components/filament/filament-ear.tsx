@@ -39,6 +39,8 @@ export function FilamentEar({
   const seenRef = useRef(0);
   const finalsRef = useRef<string[]>([]);
   const phaseRef = useRef(phase);
+  const queueRef = useRef<string[]>([]);
+  const regionRef = useRef("louisiana creole");
   phaseRef.current = phase;
 
   useEffect(() => {
@@ -85,14 +87,20 @@ export function FilamentEar({
     if (phase === "hearing" || phase === "failed") return;
     const kick = () => {
       if (phaseRef.current === "hearing") return;
-      const pack = nextDialectStim();
-      feedFilamentCatch(pack.tokens.map((text) => ({ text })));
-      setSaid(pack.tokens.join(" "));
+      if (!queueRef.current.length) {
+        const pack = nextDialectStim();
+        queueRef.current = [...pack.tokens];
+        regionRef.current = pack.label.toLowerCase();
+      }
+      const tok = queueRef.current.shift();
+      if (!tok) return;
+      feedFilamentCatch([{ text: tok }]);
+      setSaid(tok);
       setPartial("");
-      setNote(`training · ${pack.label.toLowerCase()}`);
+      setNote(`training · ${regionRef.current}`);
     };
-    const start = window.setTimeout(kick, 400);
-    const id = window.setInterval(kick, 1600);
+    const start = window.setTimeout(kick, 600);
+    const id = window.setInterval(kick, 900);
     return () => {
       window.clearTimeout(start);
       window.clearInterval(id);
