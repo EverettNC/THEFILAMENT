@@ -23,8 +23,12 @@
   #btn:disabled{opacity:.35;cursor:not-allowed}
   #st{font-size:11px;color:var(--dim);text-align:right}
   #st.on{color:var(--catch)}
-  #as-said{position:fixed;left:24px;right:24px;bottom:28px;z-index:20;max-width:48rem;pointer-events:none;
-    font-size:13px;color:var(--paper);text-shadow:0 0 12px #000}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  #mic{max-width:16rem;min-height:2.5rem;padding:0 .6rem;border:1px solid var(--dim);background:transparent;color:var(--paper);
+    font:11px inherit}
+  #level{width:10rem;height:6px;background:#1a222c;border:1px solid var(--dim)}
+  #level>i{display:block;height:100%;width:0;background:var(--catch)}
+
   #as-said .partial{color:var(--dim);font-style:italic}
 </style>
 </head>
@@ -37,7 +41,12 @@
     <a href="/live.html" data-view="/live.html">Live</a>
   </nav>
   <button id="train" type="button" aria-pressed="true">Train</button>
+  <label class="sr" for="mic">Mic</label>
+  <select id="mic" aria-label="Microphone">
+    <option value="">default mic</option>
+  </select>
   <button id="btn" type="button" disabled>Hold</button>
+  <div id="level" aria-hidden="true"><i id="level-bar"></i></div>
   <div class="st" id="st">probing ear</div>
 </div>
 <div id="as-said"></div>
@@ -115,15 +124,60 @@
     else { st.textContent='unseated'; }
   }).catch(()=>{ st.textContent='unseated'; });
 
+  const micSel = document.getElementById('mic');
+  const levelBar = document.getElementById('level-bar');
+  const WIRED = /usb|wired|external|interface|scarlett|focusrite|yeti|rode|wave|xlr|audio technica|behringer|zoom|tascam|motu|presonus|steinberg/i;
+  const KEY = 'filament.mic';
+
+  async function listMics(){
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const all = await navigator.mediaDevices.enumerateDevices();
+    const mics = all.filter((d) => d.kind === 'audioinput');
+    const saved = localStorage.getItem(KEY) || '';
+    const prefer = mics.find((d) => d.deviceId === saved) || mics.find((d) => WIRED.test(d.label)) || mics[0];
+    micSel.innerHTML = mics.length
+      ? mics.map((d) => `<option value="${d.deviceId}">${d.label || 'mic '+d.deviceId.slice(0,6)}</option>`).join('')
+      : '<option value="">default mic</option>';
+    if (prefer) micSel.value = prefer.deviceId;
+  }
+  listMics().catch(()=>{});
+  navigator.mediaDevices?.addEventListener?.('devicechange', () => { listMics().catch(()=>{}); });
+  micSel.addEventListener('change', () => localStorage.setItem(KEY, micSel.value));
+
+  function constraints(){
+    const deviceId = micSel.value;
+    const audio = {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    };
+    if (deviceId) audio.deviceId = { exact: deviceId };
+    return { audio };
+  }
+
   async function start(){
-    stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:1}});
-    ctx=new (window.AudioContext||window.webkitAudioContext)();
+    stream=await navigator.mediaDevices.getUserMedia(constraints());
+    await listMics();
+    const track = stream.getAudioTracks()[0];
+    const label = track?.label || 'mic';
+    localStorage.setItem(KEY, track?.getSettings?.().deviceId || micSel.value || '');
+    ctx=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
     if(ctx.state==='suspended') await ctx.resume();
     const source=ctx.createMediaStreamSource(stream);
     proc=ctx.createScriptProcessor(4096,1,1);
+    const meter=ctx.createAnalyser(); meter.fftSize=1024;
+    const meterBuf=new Uint8Array(meter.fftSize);
     let carry=new Int16Array(0);
     listening=true; seen=0;
     const w = frameWin(); if (w) w.filamentLive = true;
+    function pumpMeter(){
+      if(!listening) return;
+      meter.getByteTimeDomainData(meterBuf);
+      let sum=0; for(let i=0;i<meterBuf.length;i++){ const v=(meterBuf[i]-128)/128; sum+=v*v; }
+      const rms=Math.sqrt(sum/meterBuf.length);
+      if(levelBar) levelBar.style.width = Math.min(100, Math.round(rms*220))+'%';
+      requestAnimationFrame(pumpMeter);
+    }
     proc.onaudioprocess=ev=>{
       if(!listening) return;
       const next=downsample(ev.inputBuffer.getChannelData(0), ctx.sampleRate);
@@ -133,17 +187,20 @@
     };
     const mute=ctx.createGain(); mute.gain.value=0;
     source.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
+    source.connect(meter);
+    pumpMeter();
     await post(new Int16Array(0),'?reset=1');
-    btn.textContent='Stop'; st.textContent='hearing'; st.classList.add('on');
+    btn.textContent='Stop'; st.textContent='hearing · '+label; st.classList.add('on');
   }
   async function stop(){
     listening=false;
     const w = frameWin(); if (w) w.filamentLive = false;
     proc&&proc.disconnect(); stream&&stream.getTracks().forEach(t=>t.stop()); ctx&&ctx.close();
-    proc=stream=ctx=null; await post(new Int16Array(0),'?end=1');
+    proc=stream=ctx=null; if(levelBar) levelBar.style.width='0';
+    await post(new Int16Array(0),'?end=1');
     btn.textContent='Listen'; st.textContent='seated · vosk · live';
   }
-  btn.addEventListener('click',()=>{ listening?stop().catch(()=>{}):start().catch(()=>{ st.textContent='mic denied'; }); });
+  btn.addEventListener('click',()=>{ listening?stop().catch(()=>{}):start().catch((err)=>{ st.textContent = (err && err.name==='NotFoundError') ? 'no mic found' : 'mic denied'; }); });
 })();
 </script>
 </body>
