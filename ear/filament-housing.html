@@ -289,6 +289,12 @@
 </script>
 <script>
 (function(){
+  if (window !== window.top) {
+    const hud = document.getElementById('listen');
+    if (hud) hud.style.display = 'none';
+    window.filamentTrain = window.filamentTrain !== false;
+    return;
+  }
   const EAR = location.port === '4850' ? '' : 'http://127.0.0.1:4850';
 
   window.filamentTrain = true;

@@ -41,6 +41,7 @@ UI_PATH = Path(__file__).resolve().parent / "ui.html"
 HOUSING_PATH = Path(__file__).resolve().parent / "filament-housing.html"
 BARE_PATH = Path(__file__).resolve().parent / "filament.html"
 LIVE_PATH = Path(__file__).resolve().parent / "filament-live.html"
+DOOR_PATH = Path(__file__).resolve().parent / "filament-door.html"
 
 
 def seat_model():
@@ -297,7 +298,10 @@ class Ear(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
-        if path in ("/", "/ui", "/housing"):
+        if path in ("/", "/ui", "/door"):
+            self._html(DOOR_PATH if DOOR_PATH.is_file() else HOUSING_PATH)
+            return
+        if path in ("/housing",):
             self._html(HOUSING_PATH if HOUSING_PATH.is_file() else LIVE_PATH)
             return
         if path in ("/live.html", "/live-ui"):
