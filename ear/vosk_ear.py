@@ -297,11 +297,11 @@ class Ear(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
-        if path in ("/", "/ui", "/live.html"):
-            self._html(LIVE_PATH if LIVE_PATH.is_file() else BARE_PATH)
-            return
-        if path in ("/housing",):
+        if path in ("/", "/ui", "/housing"):
             self._html(HOUSING_PATH if HOUSING_PATH.is_file() else LIVE_PATH)
+            return
+        if path in ("/live.html", "/live-ui"):
+            self._html(LIVE_PATH if LIVE_PATH.is_file() else BARE_PATH)
             return
         if path in ("/bare", "/frozen"):
             self._html(BARE_PATH)
@@ -322,7 +322,8 @@ class Ear(BaseHTTPRequestHandler):
                     "door": DOOR,
                     "model": MODEL_PATH if seated else None,
                     "error": None if seated else _model_error,
-                    "whisper": False,
+                    "filaments": 7200,
+                    "housing": "v2",
                     "wholeHouse": False,
                     "live": True,
                 },
