@@ -25,6 +25,14 @@
   #listen button:disabled{opacity:.35;cursor:not-allowed}
   #listen .st{margin-top:8px;font-size:11px;color:var(--dim)}
   #listen .st.on{color:var(--tiff)}
+
+  #listen{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+  #listen .views{display:flex;gap:12px;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+  #listen .views a{color:var(--dim);text-decoration:none}
+  #listen .views a[aria-current="page"]{color:var(--tiff)}
+  #train{min-height:2.5rem;padding:0 1rem;border:1px solid var(--dim);background:transparent;color:var(--paper);font:12px inherit;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+  #train[aria-pressed="true"]{border-color:var(--tiff);color:var(--tiff)}
+
   #as-said{position:fixed;left:24px;right:24px;bottom:86px;max-width:48rem;pointer-events:none;font-size:13px;color:var(--paper);text-shadow:0 0 12px #000}
   #as-said .partial{color:var(--dim);font-style:italic}
 </style>
@@ -56,6 +64,12 @@
 </div>
 
 <div class="hud" id="listen">
+  <nav class="views" aria-label="Filament view">
+    <a href="/housing" aria-current="page">Housing</a>
+    <a href="/bare">Field</a>
+    <a href="/live.html">Live</a>
+  </nav>
+  <button id="train" type="button" aria-pressed="true">Train</button>
   <button id="btn" type="button" disabled>Hold</button>
   <div class="st" id="st">probing ear</div>
 </div>
@@ -174,7 +188,11 @@
     drawSyl(z=>z<0);
 
     // ---- the array ----
-    for(const f of fil){
+    // While the mic is live, ScriptProcessor shares this thread.
+    // Stride the draw so the ear can actually post tape.
+    const stride = window.filamentLive ? 4 : 1;
+    for(let fi=0; fi<fil.length; fi+=stride){
+      const f = fil[fi];
       const a=f.a+spin, tipA=a+f.curl;
       const p1=proj({x:Math.cos(a)*RH*0.05, y:Math.sin(a)*RH*0.05, z:f.lat*0.10});
       const p2=proj({x:Math.cos(tipA)*f.len, y:Math.sin(tipA)*f.len, z:f.lat});
@@ -217,7 +235,7 @@
       x.fillText(L.text,L.x+6,L.y);
     }
 
-    if(!window.filamentLive && Math.random()<0.03) spawn();
+    if(!window.filamentLive && window.filamentTrain!==false && Math.random()<0.03) spawn();
     requestAnimationFrame(tick);
   }
 
@@ -272,8 +290,24 @@
 <script>
 (function(){
   const EAR = location.port === '4850' ? '' : 'http://127.0.0.1:4850';
+
+  window.filamentTrain = true;
+  const trainBtn=document.getElementById('train');
+  if(trainBtn){
+    trainBtn.addEventListener('click',()=>{
+      window.filamentTrain = window.filamentTrain===false ? true : false;
+      trainBtn.setAttribute('aria-pressed', window.filamentTrain ? 'true' : 'false');
+    });
+  }
+
   const btn=document.getElementById('btn'), st=document.getElementById('st');
   let listening=false, ctx, stream, proc, queue=Promise.resolve(), seen=0;
+  const said=document.getElementById('as-said');
+  function showSaid(text, partial){
+    if(!said) return;
+    const s = String(text||'').trim();
+    said.innerHTML = s ? (partial ? '<span class="partial">'+s+'</span>' : s) : '';
+  }
   function emit(text){
     const toks = String(text||'').trim().split(/\s+/).filter(Boolean);
     if(toks.length <= seen) return;
@@ -281,6 +315,7 @@
       if(window.filamentCatch) window.filamentCatch(toks[i]);
     }
     seen = toks.length;
+    showSaid(toks.join(' '), true);
   }
   function downsample(input,inRate){
     const ratio=inRate/16000, n=Math.max(1,Math.floor(input.length/ratio)), out=new Int16Array(n);
@@ -289,11 +324,13 @@
   }
   function post(pcm,q){
     queue=queue.then(async()=>{
-      const res=await fetch(EAR+'/live'+(q||''),{method:'POST',headers:{'content-type':'application/octet-stream'},body:pcm.buffer});
+      const bytes = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength);
+      const res=await fetch(EAR+'/live'+(q||''),{method:'POST',headers:{'content-type':'application/octet-stream'},body:bytes});
       const body=await res.json();
       if(!body.ok){ st.textContent=body.error||'ear failed'; return; }
       if(body.final && body.text && body.text.trim()){
         emit(body.text);
+        showSaid(body.text, false);
         seen=0;
       } else {
         emit(body.partial||'');

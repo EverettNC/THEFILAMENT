@@ -303,7 +303,7 @@ class Ear(BaseHTTPRequestHandler):
         if path in ("/live.html", "/live-ui"):
             self._html(LIVE_PATH if LIVE_PATH.is_file() else BARE_PATH)
             return
-        if path in ("/bare", "/frozen"):
+        if path in ("/bare", "/frozen", "/field"):
             self._html(BARE_PATH)
             return
         if path in ("/simple",):

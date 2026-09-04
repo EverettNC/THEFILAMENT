@@ -28,6 +28,14 @@
   #listen button:disabled{opacity:.35;cursor:not-allowed}
   #listen .st{margin-top:8px;font-size:11px;color:var(--dim)}
   #listen .st.on{color:var(--catch)}
+
+  #listen{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+  #listen .views{display:flex;gap:12px;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+  #listen .views a{color:var(--dim);text-decoration:none}
+  #listen .views a[aria-current="page"]{color:var(--wire)}
+  #train{min-height:2.5rem;padding:0 1rem;border:1px solid var(--dim);background:transparent;color:var(--paper);font:12px inherit;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+  #train[aria-pressed="true"]{border-color:var(--wire);color:var(--wire)}
+
   @media (max-width:640px){#title p{max-width:28ch}#legend{display:none}}
 </style>
 </head>
@@ -56,6 +64,12 @@
 </div>
 
 <div class="hud" id="listen">
+  <nav class="views" aria-label="Filament view">
+    <a href="/housing">Housing</a>
+    <a href="/bare">Field</a>
+    <a href="/live.html" aria-current="page">Live</a>
+  </nav>
+  <button id="train" type="button" aria-pressed="true">Train</button>
   <button id="btn" type="button" disabled>Hold</button>
   <div class="st" id="st">probing ear</div>
 </div>
@@ -260,6 +274,10 @@
       x.fillText(L.text, L.x + 6, L.y);
     }
 
+    if(!window.filamentLive && window.filamentTrain!==false && Math.random()<0.03){
+      spawn(SYL[(Math.random()*SYL.length)|0]);
+    }
+
     requestAnimationFrame(tick);
   }
 
@@ -271,6 +289,16 @@
 <script>
 (function(){
   const EAR = location.port === '4850' ? '' : 'http://127.0.0.1:4850';
+
+  window.filamentTrain = true;
+  const trainBtn=document.getElementById('train');
+  if(trainBtn){
+    trainBtn.addEventListener('click',()=>{
+      window.filamentTrain = window.filamentTrain===false ? true : false;
+      trainBtn.setAttribute('aria-pressed', window.filamentTrain ? 'true' : 'false');
+    });
+  }
+
   const btn=document.getElementById('btn'), st=document.getElementById('st');
   let listening=false, ctx, stream, proc, queue=Promise.resolve(), seen=0;
 
@@ -289,7 +317,8 @@
   }
   function post(pcm,q){
     queue=queue.then(async()=>{
-      const res=await fetch(EAR+'/live'+(q||''),{method:'POST',headers:{'content-type':'application/octet-stream'},body:pcm.buffer});
+      const bytes = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength);
+      const res=await fetch(EAR+'/live'+(q||''),{method:'POST',headers:{'content-type':'application/octet-stream'},body:bytes});
       const body=await res.json();
       if(!body.ok){ st.textContent=body.error||'ear failed'; return; }
       if(body.final && body.text && body.text.trim()){
