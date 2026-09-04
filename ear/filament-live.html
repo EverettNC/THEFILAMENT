@@ -281,7 +281,7 @@
         : (window.FILAMENT_BUSY ? window.FILAMENT_BUSY() : false);
       if(!busy){
         const tok = (window.FILAMENT_NEXT_TOKEN && window.FILAMENT_NEXT_TOKEN()) || "y'all";
-        window.filamentNextAt = performance.now() + 1200;
+        window.filamentNextAt = performance.now() + ((window.FILAMENT_GAP && window.FILAMENT_GAP()) || 1200);
         spawn(tok);
         const lang = window.filamentLang || (window.FILAMENT_LANG_FOR && window.FILAMENT_LANG_FOR(tok)) || "en-US";
         if (window.parent && window.parent !== window) {

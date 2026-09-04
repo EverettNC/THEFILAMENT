@@ -117,6 +117,12 @@ def aside_for_carbon(words: list[dict], heard: str) -> list[dict]:
         }
         pile.insert(0, row)
         added.append(row)
+        try:
+            from board import add_residual
+
+            add_residual(str(row.get("word") or ""), "", "unsure")
+        except Exception:  # noqa: BLE001
+            pass
     if added:
         save_carbon(pile)
     return added

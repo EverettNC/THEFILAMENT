@@ -180,7 +180,7 @@
       vz:(fromBack?1:-1)*(0.10+Math.random()*0.10),
       text:tok, held:false});
     const lang = window.filamentLang || (window.FILAMENT_LANG_FOR && window.FILAMENT_LANG_FOR(tok)) || "en-US";
-    window.filamentNextAt = performance.now() + 1200;
+    window.filamentNextAt = performance.now() + ((window.FILAMENT_GAP && window.FILAMENT_GAP()) || 1200);
     if (window.parent && window.parent !== window) {
       window.parent.postMessage({ type: "filament-token", token: tok, region: window.filamentRegion, lang: lang }, "*");
     } else if (window.FILAMENT_SPEAK) {
@@ -263,7 +263,12 @@
       if(!test(s.z) && Math.abs(s.z)<LH*1.8) continue;
       if(!test(s.z) && Math.abs(s.z)>=LH*1.8) {
         if(Math.hypot(s.x,s.y)>RH*2.6 || Math.abs(s.z)>LH*2.2){
-          if(!s.held){ slipped++; report(); }
+          if(!s.held){
+            slipped++; report();
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage({ type: "filament-slipped", token: s.text, region: window.filamentRegion || "" }, "*");
+            }
+          }
           syl.splice(i,1);
         }
         continue;
@@ -275,6 +280,9 @@
         if(!s.held){
           s.held=true; caught++; report();
           labels.push({x:p.X,y:p.Y,text:s.text,life:1});
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: "filament-caught", token: s.text, region: window.filamentRegion || "" }, "*");
+          }
         }
       }
       const size = Math.max(11, 16*p.d);
@@ -282,7 +290,12 @@
       x.fillStyle=s.held?'rgba(248,255,42,0.95)':`rgba(223,233,242,${0.26+0.34*p.d})`;
       x.fillText(s.text, p.X, p.Y);
       if(Math.hypot(s.x,s.y)>RH*2.6 || Math.abs(s.z)>LH*2.2){
-        if(!s.held){ slipped++; report(); }
+        if(!s.held){
+          slipped++; report();
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: "filament-slipped", token: s.text, region: window.filamentRegion || "" }, "*");
+          }
+        }
         syl.splice(i,1);
       }
     }

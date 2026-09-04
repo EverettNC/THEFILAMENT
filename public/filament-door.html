@@ -30,8 +30,14 @@
   #level>i{display:block;height:100%;width:0;background:var(--catch)}
 
   #as-said .unsure{color:var(--hot);border-bottom:1px dashed var(--hot)}
-  #carbon{position:fixed;left:18px;top:18px;z-index:20;max-width:18rem;max-height:42vh;overflow:auto;
-    font-size:11px;color:var(--dim);text-shadow:0 0 12px #000;pointer-events:auto}
+  #carbon{position:fixed;left:18px;top:auto;bottom:auto;z-index:19;display:none}
+  #boards{position:fixed;left:18px;top:18px;z-index:20;max-width:20rem;max-height:38vh;overflow:auto;
+    font-size:11px;color:var(--dim);text-shadow:0 0 12px #000}
+  #boards section{margin-bottom:12px}
+  #boards b{color:var(--hot);font-weight:400;letter-spacing:.14em;text-transform:uppercase}
+  #boards li{margin:4px 0;color:var(--paper);list-style:none}
+  #boards .hits{color:var(--dim)}
+
   #carbon b{color:var(--hot);font-weight:400;letter-spacing:.14em;text-transform:uppercase}
   #carbon li{margin:6px 0;color:var(--paper);list-style:none}
   #map{position:fixed;left:18px;bottom:18px;z-index:20;max-width:22rem;max-height:46vh;overflow:auto;
@@ -54,6 +60,7 @@
     <a href="/live.html" data-view="/live.html">Live</a>
   </nav>
   <button id="train" type="button" aria-pressed="true">Train</button>
+  <button id="speed" type="button">Speed 1×</button>
   <button id="speak" type="button" aria-pressed="true">Speak</button>
   <div class="st" id="region">training · Kentucky</div>
   <label class="sr" for="mic">Mic</label>
@@ -63,6 +70,16 @@
   <button id="btn" type="button" disabled>Hold</button>
   <div id="level" aria-hidden="true"><i id="level-bar"></i></div>
   <div class="st" id="st">probing ear</div>
+</div>
+<div id="boards">
+  <section>
+    <b>Family board · Porch</b>
+    <ul id="family-list"></ul>
+  </section>
+  <section>
+    <b>Residual</b>
+    <ul id="residual-list"></ul>
+  </section>
 </div>
 <div id="carbon" hidden>
   <b>Carbon</b>
@@ -119,8 +136,61 @@
     if (window.filamentMute && window.speechSynthesis) window.speechSynthesis.cancel();
   });
 
+  const SPEEDS = [0.6, 1, 2, 4];
+  const SPEED_LABEL = { 0.6: "Slow", 1: "Speed 1×", 2: "Fast 2×", 4: "Rush 4×" };
+  let speedIdx = 1;
+  const speedBtn = document.getElementById('speed');
+  function applySpeed(){
+    const spd = SPEEDS[speedIdx];
+    window.filamentSpeed = spd;
+    if (window.FILAMENT_MAP) window.filamentSpeed = spd;
+    const w = frameWin();
+    if (w) w.filamentSpeed = spd;
+    speedBtn.textContent = SPEED_LABEL[spd] || ("Speed "+spd+"×");
+  }
+  speedBtn.addEventListener('click', () => {
+    speedIdx = (speedIdx + 1) % SPEEDS.length;
+    applySpeed();
+  });
+
+  function paintBoard(id, rows){
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = (rows||[]).slice(0,16).map((r) => {
+      const said = r.said || r.keep || "";
+      const hits = r.hits ? ' <span class="hits">×'+r.hits+'</span>' : '';
+      const region = r.region ? ' · '+r.region : '';
+      return '<li>'+said+hits+region+'</li>';
+    }).join('') || '<li class="hits">empty</li>';
+  }
+  function pullBoard(){
+    fetch(EAR+'/board').then(r=>r.json()).then((b) => {
+      if (!b.ok) return;
+      paintBoard('family-list', b.family);
+      paintBoard('residual-list', b.residual);
+    }).catch(()=>{});
+  }
+  function postBoard(bin, token, region, why){
+    if (!token) return;
+    fetch(EAR+'/board', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ bin, token, region, why }),
+    }).then(() => pullBoard()).catch(()=>{});
+  }
+  pullBoard();
+  setInterval(pullBoard, 4000);
+
   window.addEventListener('message', (ev) => {
     const data = ev.data || {};
+    if (data.type === 'filament-caught') {
+      postBoard('family', data.token, data.region, 'caught');
+      return;
+    }
+    if (data.type === 'filament-slipped') {
+      postBoard('residual', data.token, data.region, 'slipped');
+      return;
+    }
     if (data.type !== 'filament-token') return;
     const el = document.getElementById('region');
     if (el && data.region) el.textContent = 'training · ' + data.region;
@@ -152,6 +222,7 @@
   stage.addEventListener('load', () => {
     setTrain(window.filamentTrain !== false);
     pushMap();
+    applySpeed();
   });
   setInterval(() => {
     const w = frameWin();

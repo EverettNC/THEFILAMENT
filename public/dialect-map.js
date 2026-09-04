@@ -106,7 +106,7 @@
     const done = () => {
       talking = false;
     };
-    talkTimer = setTimeout(done, 2800);
+    talkTimer = setTimeout(done, Math.max(700, 2800 / (Number(root.filamentSpeed) || 1)));
     if (root.filamentMute || !tok || !root.speechSynthesis) return;
     const u = new SpeechSynthesisUtterance(tok);
     u.lang = lang || langFor(tok);
@@ -154,7 +154,12 @@
   root.FILAMENT_BUSY = busy;
   root.FILAMENT_LANG_FOR = langFor;
   root.filamentRegion = current.label;
-  root.filamentMute = false;
+  root.filamentSpeed = 1;
+  function gap() {
+    const s = Number(root.filamentSpeed) || 1;
+    return Math.max(220, 1200 / s);
+  }
+  root.FILAMENT_GAP = gap;
   if (root.speechSynthesis && root.speechSynthesis.getVoices) {
     root.speechSynthesis.getVoices();
     root.speechSynthesis.addEventListener("voiceschanged", () => root.speechSynthesis.getVoices());

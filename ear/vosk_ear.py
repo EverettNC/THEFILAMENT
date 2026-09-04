@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from mouth import CONF_FLOOR, dress, load_carbon, save_carbon, shape_words
+from board import add_family, add_residual, snapshot
 
 DOOR = int(os.environ.get("FILAMENT_EAR_PORT", "4850"))
 HOME_MODEL = "/Users/EverettN/Downloads/vosk-model-en-us-0.22-lgraph"
@@ -349,18 +350,37 @@ class Ear(BaseHTTPRequestHandler):
             pile = load_carbon()
             self._json(200, {"ok": True, "for": "Carbon", "count": len(pile), "aside": pile})
             return
+        if path in ("/board", "/porch"):
+            self._json(200, snapshot())
+            return
         self._json(404, {"ok": False, "error": "Not this nerve."})
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         query = urlparse(self.path).query
         params = dict(part.split("=", 1) if "=" in part else (part, "1") for part in query.split("&") if part)
-        if path not in ("/", "/stt", "/transcribe", "/live", "/carbon"):
+        if path not in ("/", "/stt", "/transcribe", "/live", "/carbon", "/board", "/porch"):
             self._json(404, {"ok": False, "error": "Not this nerve."})
             return
         if path == "/carbon":
             save_carbon([])
             self._json(200, {"ok": True, "for": "Carbon", "count": 0, "aside": []})
+            return
+        if path in ("/board", "/porch"):
+            try:
+                payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0) or 0) or b"{}")
+            except json.JSONDecodeError:
+                payload = {}
+            if not isinstance(payload, dict):
+                payload = {}
+            token = str(payload.get("token") or payload.get("said") or "").strip()
+            region = str(payload.get("region") or "")
+            bin_name = str(payload.get("bin") or payload.get("board") or "family").lower()
+            if bin_name == "residual":
+                row = add_residual(token, region, str(payload.get("why") or "slipped"))
+            else:
+                row = add_family(token, region)
+            self._json(200, {"ok": True, "row": row, **snapshot()})
             return
         if seat_model() is None:
             self._json(503, {"ok": False, "seated": False, "error": _model_error, "engine": "vosk"})
