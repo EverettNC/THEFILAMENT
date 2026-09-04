@@ -34,6 +34,7 @@ MODEL_PATH = resolve_model_path()
 
 _model = None
 _model_error = None
+_live_rec = None
 
 
 def seat_model():
@@ -152,6 +153,84 @@ def hear(pcm: bytes) -> dict:
     }
 
 
+def words_from(payload: dict) -> list[dict]:
+    words = []
+    for w in payload.get("result") or payload.get("partial_result") or []:
+        if not isinstance(w, dict):
+            continue
+        tok = str(w.get("word") or "").strip()
+        if not tok:
+            continue
+        words.append(
+            {
+                "text": tok,
+                "start": float(w.get("start") or 0),
+                "end": float(w.get("end") or 0),
+            }
+        )
+    return words
+
+
+def live_hear(pcm: bytes, reset: bool = False, end: bool = False) -> dict:
+    global _live_rec
+    from vosk import KaldiRecognizer, SetLogLevel  # type: ignore
+
+    SetLogLevel(-1)
+    model = seat_model()
+    if model is None:
+        return {"ok": False, "seated": False, "error": _model_error, "engine": "vosk"}
+    if reset or _live_rec is None:
+        _live_rec = KaldiRecognizer(model, 16000)
+        _live_rec.SetWords(True)
+        try:
+            _live_rec.SetPartialWords(True)
+        except Exception:  # noqa: BLE001
+            pass
+    if end:
+        final = json.loads(_live_rec.FinalResult() or "{}")
+        _live_rec = None
+        text = (final.get("text") or "").strip()
+        return {
+            "ok": True,
+            "final": True,
+            "text": text,
+            "partial": "",
+            "words": words_from(final),
+            "engine": "vosk",
+            "organ": "filament",
+            "cloud": False,
+            "seated": True,
+        }
+    if not pcm:
+        return {"ok": True, "final": False, "text": "", "partial": "", "words": [], "seated": True}
+    if _live_rec.AcceptWaveform(pcm):
+        result = json.loads(_live_rec.Result() or "{}")
+        text = (result.get("text") or "").strip()
+        return {
+            "ok": True,
+            "final": True,
+            "text": text,
+            "partial": "",
+            "words": words_from(result),
+            "engine": "vosk",
+            "organ": "filament",
+            "cloud": False,
+            "seated": True,
+        }
+    partial = json.loads(_live_rec.PartialResult() or "{}")
+    return {
+        "ok": True,
+        "final": False,
+        "text": "",
+        "partial": (partial.get("partial") or "").strip(),
+        "words": words_from(partial),
+        "engine": "vosk",
+        "organ": "filament",
+        "cloud": False,
+        "seated": True,
+    }
+
+
 def extract_file(headers: dict[str, str], body: bytes) -> bytes:
     ctype = headers.get("Content-Type", "")
     if "multipart/form-data" not in ctype:
@@ -202,7 +281,7 @@ class Ear(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
-        if path in ("/", "/health", "/stt"):
+        if path in ("/", "/health", "/stt", "/live"):
             seated = seat_model() is not None
             self._json(
                 200,
@@ -217,6 +296,7 @@ class Ear(BaseHTTPRequestHandler):
                     "error": None if seated else _model_error,
                     "whisper": False,
                     "wholeHouse": False,
+                    "live": True,
                 },
             )
             return
@@ -224,17 +304,39 @@ class Ear(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
-        if path not in ("/", "/stt", "/transcribe"):
+        query = urlparse(self.path).query
+        params = dict(part.split("=", 1) if "=" in part else (part, "1") for part in query.split("&") if part)
+        if path not in ("/", "/stt", "/transcribe", "/live"):
             self._json(404, {"ok": False, "error": "Not this nerve."})
             return
         if seat_model() is None:
             self._json(503, {"ok": False, "seated": False, "error": _model_error, "engine": "vosk"})
             return
         length = int(self.headers.get("Content-Length") or 0)
-        if length <= 0 or length > 32 * 1024 * 1024:
+        if length > 32 * 1024 * 1024:
             self._json(400, {"ok": False, "error": "No tape reached the ear."})
             return
-        body = self.rfile.read(length)
+        body = self.rfile.read(length) if length > 0 else b""
+
+        if path == "/live":
+            reset = params.get("reset") in ("1", "true")
+            end = params.get("end") in ("1", "true")
+            ctype = self.headers.get("Content-Type", "")
+            pcm = body
+            if "multipart/form-data" in ctype or body[:4] == b"RIFF":
+                try:
+                    audio = extract_file({k: v for k, v in self.headers.items()}, body)
+                    pcm, _dur = to_pcm16_mono_16k(audio)
+                except Exception as exc:  # noqa: BLE001
+                    self._json(400, {"ok": False, "error": str(exc)})
+                    return
+            result = live_hear(pcm, reset=reset, end=end)
+            self._json(200 if result.get("ok") else 503, result)
+            return
+
+        if length <= 0:
+            self._json(400, {"ok": False, "error": "No tape reached the ear."})
+            return
         audio = extract_file({k: v for k, v in self.headers.items()}, body)
         if len(audio) < 64:
             self._json(400, {"ok": False, "error": "The fibers did not catch speech."})
