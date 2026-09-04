@@ -4,6 +4,6 @@
 
 Everett, 2026-09-01: *"Do not do anything to that. That's perfect. That's beautiful. Save that right there."*
 
-Do not edit. Serve at `/bare` and `/frozen`. Changes go in a new dated file.
+Everett, 2026-09-04: remove the electrified gold collar. Seizure risk. Neurodivergent. Gold is gone. Blue at rest. Green only while a word is in that fiber, then blue again.
 
-Housing v2 (`filament-housing.html`) is the live face on `/`.
+Do not put gold, copper flash, or strobe back in.

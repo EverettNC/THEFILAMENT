@@ -167,7 +167,7 @@ export function createFilamentEngine(
 
     gfx.save();
     gfx.strokeStyle = listening
-      ? "rgba(255,208,138,0.28)"
+      ? "rgba(127,227,255,0.22)"
       : "rgba(127,227,255,0.13)";
     gfx.setLineDash([2, 7]);
     gfx.lineWidth = 1;
@@ -189,9 +189,9 @@ export function createFilamentEngine(
       const y2 = CY + Math.sin(tipA) * f.len;
 
       if (f.charge > 0.01) {
-        gfx.strokeStyle = `rgba(255,208,138,${0.30 + 0.55 * f.charge})`;
-        gfx.lineWidth = f.w + 1.5 * f.charge;
-        f.charge *= 0.93;
+        gfx.strokeStyle = `rgba(138,255,193,${0.16 + 0.28 * f.charge})`;
+        gfx.lineWidth = f.w + 0.35 * f.charge;
+        f.charge *= 0.86;
       } else {
         const g = 0.045 + 0.1 * pulse + (listening ? energy * 0.12 : 0);
         gfx.strokeStyle = `rgba(127,227,255,${g})`;
@@ -206,13 +206,13 @@ export function createFilamentEngine(
     const coreR = R * (0.14 + (listening ? energy * 0.04 : 0));
     const cg = gfx.createRadialGradient(CX, CY, 0, CX, CY, coreR);
     if (listening) {
-      cg.addColorStop(0, `rgba(255,240,210,${0.55 + energy * 0.35})`);
-      cg.addColorStop(0.4, "rgba(255,208,138,0.22)");
+      cg.addColorStop(0, `rgba(223,233,242,${0.28 + energy * 0.12})`);
+      cg.addColorStop(0.4, "rgba(127,227,255,0.16)");
     } else if (processing) {
-      cg.addColorStop(0, "rgba(255,208,138,0.62)");
+      cg.addColorStop(0, "rgba(138,255,193,0.28)");
       cg.addColorStop(0.4, "rgba(127,227,255,0.18)");
     } else {
-      cg.addColorStop(0, "rgba(255,240,210,0.55)");
+      cg.addColorStop(0, "rgba(223,233,242,0.28)");
       cg.addColorStop(0.4, "rgba(127,227,255,0.16)");
     }
     cg.addColorStop(1, "rgba(127,227,255,0)");

@@ -5,7 +5,7 @@
   --color-ink: #05070a;
   --color-ink-elevated: #0c1016;
   --color-wire: #7fe3ff;
-  --color-hot: #ffd08a;
+  --color-hot: #8affc1;
   --color-catch: #8affc1;
   --color-dim: #4a5a6a;
   --color-paper: #dfe9f2;
@@ -24,8 +24,8 @@
 
   --shadow-panel: 0 0 0 1px color-mix(in oklab, #dfe9f2 10%, transparent);
   --shadow-wire: 0 0 0 1px color-mix(in oklab, #7fe3ff 35%, transparent);
-  --shadow-hot: 0 0 0 1px color-mix(in oklab, #ffd08a 70%, transparent);
-  --shadow-hot-soft: 0 0 0 1px color-mix(in oklab, #ffd08a 40%, transparent);
+  --shadow-hot: 0 0 0 1px color-mix(in oklab, #8affc1 70%, transparent);
+  --shadow-hot-soft: 0 0 0 1px color-mix(in oklab, #8affc1 40%, transparent);
   --shadow-catch: 0 0 0 1px color-mix(in oklab, #8affc1 35%, transparent);
   --shadow-paper: 0 0 0 1px color-mix(in oklab, #dfe9f2 14%, transparent);
 
