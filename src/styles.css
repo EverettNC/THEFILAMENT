@@ -1,107 +1,59 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Sans:wght@400;500;600&display=swap");
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #05070a;
-  --color-ink-elevated: #0c1016;
-  --color-wire: #7fe3ff;
-  --color-hot: #8affc1;
-  --color-catch: #8affc1;
-  --color-dim: #4a5a6a;
+  --color-ink: #04060a;
+  --color-bg: #04060a;
+  --color-surface: #0b1016;
+  --color-raised: #121820;
+  --color-fg: #dfe9f2;
   --color-paper: #dfe9f2;
-  --color-hair: color-mix(in oklab, #dfe9f2 12%, transparent);
-  --color-hair-strong: color-mix(in oklab, #dfe9f2 22%, transparent);
+  --color-muted: #8fa3b5;
+  --color-dim: #4a5a6a;
+  --color-subtle: #4a5a6a;
+  --color-border: color-mix(in oklab, #dfe9f2 12%, transparent);
+  --color-tiff: #2ff7ee;
+  --color-wire: #7fe3ff;
+  --color-copper: #c87941;
+  --color-catch: #8affc1;
+  --color-hot: #f8ff2a;
+  --color-shell: #8fa3b5;
+  --color-accent: #2ff7ee;
+  --color-danger: #c45c4a;
 
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-display: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
-  --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 24px;
-  --radius-full: 9999px;
 
-  --shadow-panel: 0 0 0 1px color-mix(in oklab, #dfe9f2 10%, transparent);
-  --shadow-wire: 0 0 0 1px color-mix(in oklab, #7fe3ff 35%, transparent);
-  --shadow-hot: 0 0 0 1px color-mix(in oklab, #8affc1 70%, transparent);
-  --shadow-hot-soft: 0 0 0 1px color-mix(in oklab, #8affc1 40%, transparent);
-  --shadow-catch: 0 0 0 1px color-mix(in oklab, #8affc1 35%, transparent);
-  --shadow-paper: 0 0 0 1px color-mix(in oklab, #dfe9f2 14%, transparent);
-
-  --text-2xs: 0.6875rem;
-  --tracking-display: 0.16em;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-quick: 150ms;
+  --motion-fast: 250ms;
 }
 
 @layer base {
   html {
+    height: 100%;
+    background: var(--color-ink);
+    color: var(--color-paper);
+    font-family: var(--font-mono);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  html,
   body {
+    min-height: 100dvh;
     height: 100%;
-  }
-
-  body {
-    margin: 0;
+    overflow: hidden;
     background: var(--color-ink);
     color: var(--color-paper);
-    font-family: var(--font-mono);
-    overflow: hidden;
   }
 
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
-  }
-
-  ::selection {
-    background: color-mix(in oklab, var(--color-wire) 35%, transparent);
-    color: var(--color-paper);
-  }
-}
-
-@layer components {
-  .dock-sheet {
-    max-height: 46vh;
-    transition:
-      transform var(--motion-fast, 250ms) cubic-bezier(0.22, 1, 0.36, 1),
-      opacity var(--motion-fast, 250ms) cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .dock-sheet[data-open="false"] {
-    transform: translateY(calc(100% - 2.75rem));
-    opacity: 0.96;
-  }
-
-  @media (min-width: 768px) {
-    .dock-sheet {
-      max-height: none;
-    }
-    .dock-sheet[data-open="false"] {
-      transform: none;
-      opacity: 1;
-    }
-  }
-
-  .listen-halo {
-    position: absolute;
-    inset: -6px;
-    border-radius: 9999px;
-    border-width: 1px;
-    border-style: dashed;
-    pointer-events: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
   }
 }

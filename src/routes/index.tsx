@@ -1,8 +1,16 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { FilamentApp } from "@/components/filament-app";
+import { FilamentEar } from "@/components/filament/filament-ear";
+import { FilamentStage, type FilamentView } from "@/components/filament/filament-stage";
 
 export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
-  return <FilamentApp />;
+  const [view, setView] = useState<FilamentView>("housing");
+  return (
+    <>
+      <FilamentStage view={view} />
+      <FilamentEar view={view} onView={setView} />
+    </>
+  );
 }
