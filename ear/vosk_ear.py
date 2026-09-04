@@ -44,6 +44,7 @@ HOUSING_PATH = Path(__file__).resolve().parent / "filament-housing.html"
 BARE_PATH = Path(__file__).resolve().parent / "filament.html"
 LIVE_PATH = Path(__file__).resolve().parent / "filament-live.html"
 DOOR_PATH = Path(__file__).resolve().parent / "filament-door.html"
+MAP_PATH = Path(__file__).resolve().parent / "dialect-map.js"
 
 
 def seat_model():
@@ -278,6 +279,16 @@ class Ear(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def _file(self, path: Path, ctype: str) -> None:
+        raw = path.read_bytes() if path.is_file() else b""
+        self.send_response(200 if raw else 404)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        if raw:
+            self.wfile.write(raw)
+
     def _html(self, path: Path) -> None:
         page = path.read_text(encoding="utf-8") if path.is_file() else "<p>UI missing.</p>"
         raw = page.encode()
@@ -299,6 +310,9 @@ class Ear(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path in ("/", "/ui", "/door"):
             self._html(DOOR_PATH if DOOR_PATH.is_file() else HOUSING_PATH)
+            return
+        if path in ("/dialect-map.js",):
+            self._file(MAP_PATH, "application/javascript; charset=utf-8")
             return
         if path in ("/housing",):
             self._html(HOUSING_PATH if HOUSING_PATH.is_file() else LIVE_PATH)

@@ -1,13 +1,25 @@
 /**
  * Tokens a default English model tends to shave, flatten, or "correct."
- * US map: Louisiana Creole through Florida Cracker, Chinatown, Vegas,
- * Taiwanese, Thai, Seattle, Minnesota, Moab, Texas, Tennessee, Kentucky,
- * Brooklyn, the Bronx. Idle spawn and Stimulate build the library fast.
+ * Train walks the map: Kentucky → Tennessee → Texas → Louisiana Creole/bayou →
+ * Florida cracker → Washington hippies → Montana → Utah →
+ * Vegas (oreo / Chinese / Mandarin) → Minnesota, Brooklyn, Bronx, Caribbean, Hawaiian, Thai.
  */
 
 export const DIALECT_MAP = {
+  kentucky: {
+    label: "Kentucky",
+    tokens: ["holler", "y'uns", "nigh", "reckon", "poke", "yonder", "ain't", "mash", "cain't"],
+  },
+  tennessee: {
+    label: "Tennessee",
+    tokens: ["holler", "reckon", "yonder", "ain't", "mash", "nigh", "y'uns", "cain't", "bless"],
+  },
+  texas: {
+    label: "Texas drawl",
+    tokens: ["howdy", "y'all", "fixin'", "over yonder", "darlin'", "pardner", "cain't", "might could", "all hat", "ma'am"],
+  },
   louisiana: {
-    label: "Louisiana Creole",
+    label: "Louisiana Creole · bayou",
     tokens: [
       "cher",
       "sha",
@@ -29,48 +41,69 @@ export const DIALECT_MAP = {
     ],
   },
   florida: {
-    label: "Florida Cracker",
-    tokens: ["y'all", "ain't", "cain't", "fixin'", "yonder", "reckon", "might could", "palmetto", "gator", "hammock", "swamp"],
+    label: "Florida cracker · hep · redneck",
+    tokens: [
+      "y'all",
+      "ain't",
+      "cain't",
+      "fixin'",
+      "yonder",
+      "reckon",
+      "might could",
+      "palmetto",
+      "gator",
+      "hammock",
+      "swamp",
+      "hep",
+      "cracker",
+      "tain't",
+      "sho nuff",
+      "done told",
+      "boy",
+    ],
   },
-  chinatown: {
-    label: "LA Chinatown",
-    tokens: ["dim sum", "siu mai", "cha siu", "lai see", "m'goi", "ho sik", "ni-hao", "xie-xie", "hao"],
+  washington: {
+    label: "Washington hippies",
+    tokens: ["the mountain", "drizzle", "the pass", "spendy", "you bet", "copacetic", "far out", "rainier", "moss", "the island"],
+  },
+  montana: {
+    label: "Montana",
+    tokens: ["big sky", "huckleberry", "the divide", "you bet", "range", "the pass", "butte", "howdy"],
+  },
+  utah: {
+    label: "Utah",
+    tokens: ["the trail", "slickrock", "wash", "the lake", "ward", "pioneer", "mesa", "hoodoo", "desert"],
   },
   vegas: {
-    label: "Vegas",
-    tokens: ["the strip", "comped", "whale", "high roller", "tap out"],
-  },
-  taiwanese: {
-    label: "Taiwanese",
-    tokens: ["a-ma", "mei-you", "bubble", "night market", "la", "ni-hao", "hao"],
-  },
-  thai: {
-    label: "Thai",
-    tokens: ["sawasdee", "khrap", "ka", "nam prik", "pad krapow", "sabai"],
-  },
-  seattle: {
-    label: "Seattle",
-    tokens: ["the mountain", "drizzle", "the pass", "spendy", "you bet", "copacetic"],
+    label: "Vegas · oreo · Chinese · Mandarin",
+    tokens: [
+      "the strip",
+      "comped",
+      "whale",
+      "high roller",
+      "tap out",
+      "bruh",
+      "on god",
+      "no cap",
+      "you feel me",
+      "straight up",
+      "fam",
+      "dim sum",
+      "siu mai",
+      "cha siu",
+      "lai see",
+      "m'goi",
+      "ni-hao",
+      "xie-xie",
+      "hao",
+      "ma",
+      "dui",
+      "mei-you",
+    ],
   },
   minnesota: {
     label: "Minnesota",
     tokens: ["ope", "you betcha", "dontcha know", "uff-da", "hotdish", "yeah no", "no yeah"],
-  },
-  moab: {
-    label: "Moab",
-    tokens: ["slickrock", "mesa", "the trail", "wash", "hoodoo", "desert"],
-  },
-  texas: {
-    label: "Texas drawl",
-    tokens: ["howdy", "y'all", "fixin'", "over yonder", "darlin'", "pardner", "cain't", "might could", "all hat", "ma'am"],
-  },
-  tennessee: {
-    label: "Tennessee",
-    tokens: ["holler", "reckon", "yonder", "ain't", "mash", "nigh", "y'uns", "cain't", "bless"],
-  },
-  kentucky: {
-    label: "Kentucky",
-    tokens: ["holler", "y'uns", "nigh", "reckon", "poke", "yonder", "ain't", "mash"],
   },
   brooklyn: {
     label: "Brooklyn",
@@ -87,6 +120,10 @@ export const DIALECT_MAP = {
   hawaiian: {
     label: "Hawaiian Pidgin",
     tokens: ["da kine", "howzit", "pau", "mahalo", "bumbai"],
+  },
+  thai: {
+    label: "Thai",
+    tokens: ["sawasdee", "khrap", "ka", "nam prik", "pad krapow", "sabai"],
   },
 } as const;
 
@@ -109,7 +146,7 @@ export function dialectTokens(): string[] {
 
 export const SYLLABLES = dialectTokens();
 export const KEYTERMS: string[] = SYLLABLES.filter((s) => s.length <= 50).slice(0, 100);
-export const DIALECT_STIM = DIALECT_MAP.louisiana.tokens;
+export const DIALECT_STIM = DIALECT_MAP.kentucky.tokens;
 
 let stimIndex = 0;
 

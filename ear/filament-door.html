@@ -47,6 +47,7 @@
     <a href="/live.html" data-view="/live.html">Live</a>
   </nav>
   <button id="train" type="button" aria-pressed="true">Train</button>
+  <div class="st" id="region">training · Kentucky</div>
   <label class="sr" for="mic">Mic</label>
   <select id="mic" aria-label="Microphone">
     <option value="">default mic</option>
@@ -87,6 +88,11 @@
   }
   trainBtn.addEventListener('click', () => setTrain(window.filamentTrain === false));
   stage.addEventListener('load', () => setTrain(window.filamentTrain !== false));
+  setInterval(() => {
+    const w = frameWin();
+    const el = document.getElementById('region');
+    if (el && w && w.filamentRegion) el.textContent = 'training · ' + w.filamentRegion;
+  }, 400);
 
   links.forEach((a) => {
     a.addEventListener('click', (e) => {

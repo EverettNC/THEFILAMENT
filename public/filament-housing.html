@@ -53,7 +53,8 @@
   filaments <span class="n" id="fcount">—</span> &nbsp;·&nbsp;
   caught <span class="n" id="scount">0</span> &nbsp;·&nbsp;
   slipped <span class="n" id="miss">0</span> &nbsp;·&nbsp;
-  <span class="n" id="pct">—</span>
+  <span class="n" id="pct">—</span><br>
+  training <span class="n" id="region">—</span>
 </div>
 
 <div class="hud" id="legend">
@@ -74,6 +75,7 @@
   <div class="st" id="st">probing ear</div>
 </div>
 
+<script src="/dialect-map.js"></script>
 <script>
 (function(){
   const c=document.getElementById('c'), x=c.getContext('2d');
@@ -94,8 +96,7 @@
     {n:'ado',    r:232, g:244, b:255}
   ];
 
-  const SYL=["cher","sha","lagniappe","couyon","envie","boudin","who dat","yeah you right","fais-dodo","pirogue","bayou","gumbo","zydeco","ova","dere","dat","dis","y'all","ain't","cain't","fixin'","yonder","reckon","might could","palmetto","gator","hammock","swamp","dim sum","siu mai","cha siu","lai see","m'goi","ho sik","ni-hao","xie-xie","hao","the strip","comped","whale","high roller","tap out","a-ma","mei-you","bubble","night market","la","sawasdee","khrap","ka","nam prik","pad krapow","sabai","the mountain","drizzle","the pass","spendy","you bet","copacetic","ope","you betcha","dontcha know","uff-da","hotdish","yeah no","no yeah","slickrock","mesa","the trail","wash","hoodoo","desert","howdy","over yonder","darlin'","pardner","all hat","ma'am","holler","mash","nigh","y'uns","bless","poke","madonn'","gabagool","fuhgeddabou","oobatz","bodega","deadass","yerr","brick","son","wallahi","ock","nahmean","fam","good looks","irie","wagwan","likkle","yute","mon","ting","bruh","da kine","howzit","pau","mahalo","bumbai"];
-
+  const regionEl=document.getElementById('region');
   const fil=[], syl=[], labels=[];
   let caught=0, slipped=0, t=0, spin=0;
 
@@ -167,7 +168,9 @@
     }
   }
 
-  function spawn(){
+  function spawn(forced){
+    const tok = forced || (window.FILAMENT_NEXT_TOKEN && window.FILAMENT_NEXT_TOKEN()) || "y'all";
+    if (regionEl && window.filamentRegion) regionEl.textContent = window.filamentRegion;
     const fromBack = Math.random()<0.6;
     const glance = Math.random()<0.22;
     const a=Math.random()*Math.PI*2, r=glance? RH*(1.05+Math.random()*0.35) : Math.random()*RH*0.88;
@@ -175,7 +178,7 @@
       z: fromBack? -LH*1.7 : LH*1.7,
       vx:0, vy:0,
       vz:(fromBack?1:-1)*(0.10+Math.random()*0.10),
-      text:SYL[(Math.random()*SYL.length)|0], held:false});
+      text:tok, held:false});
   }
 
   function tick(){
