@@ -8,7 +8,9 @@ Empty ear stays empty. No invented speech.
 from __future__ import annotations
 
 import json
+import multiprocessing as mp
 import os
+import queue
 import subprocess
 import tempfile
 import wave
@@ -37,7 +39,10 @@ MODEL_PATH = resolve_model_path()
 
 _model = None
 _model_error = None
-_live_rec = None
+_live_in = None
+_live_out = None
+_live_proc = None
+_live_job = 0
 
 
 UI_PATH = Path(__file__).resolve().parent / "ui.html"
@@ -69,6 +74,13 @@ def seat_model():
         return None
 
 
+def ffmpeg_bin() -> str:
+    for candidate in ("/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg", "ffmpeg"):
+        if candidate == "ffmpeg" or Path(candidate).is_file():
+            return candidate
+    return "ffmpeg"
+
+
 def to_pcm16_mono_16k(raw: bytes) -> tuple[bytes, float]:
     if raw[:4] == b"RIFF" and raw[8:12] == b"WAVE":
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
@@ -95,7 +107,7 @@ def to_pcm16_mono_16k(raw: bytes) -> tuple[bytes, float]:
     try:
         proc = subprocess.run(
             [
-                "ffmpeg",
+                ffmpeg_bin(),
                 "-y",
                 "-i",
                 src_path,
@@ -166,75 +178,167 @@ def words_from(payload: dict) -> list[dict]:
     return shape_words(payload)
 
 
-def live_hear(pcm: bytes, reset: bool = False, end: bool = False) -> dict:
-    global _live_rec
-    from vosk import KaldiRecognizer, SetLogLevel  # type: ignore
+def _live_packet(
+    final: bool,
+    text: str = "",
+    partial: str = "",
+    payload: dict | None = None,
+    job: int = 0,
+) -> dict:
+    body = {
+        "ok": True,
+        "final": final,
+        "text": text,
+        "partial": partial,
+        "words": words_from(payload or {}),
+        "engine": "vosk",
+        "organ": "filament",
+        "cloud": False,
+        "seated": True,
+        "job": job,
+    }
+    return dress(body, payload or {})
+
+
+def _kaldi_worker(model_path: str, in_q, out_q) -> None:
+    """Own process. If Kaldi aborts, the HTTP door stays up."""
+    from vosk import KaldiRecognizer, Model, SetLogLevel  # type: ignore
 
     SetLogLevel(-1)
-    model = seat_model()
-    if model is None:
-        return {"ok": False, "seated": False, "error": _model_error, "engine": "vosk"}
-    if reset or _live_rec is None:
-        _live_rec = KaldiRecognizer(model, 16000)
-        _live_rec.SetWords(True)
-        # No SetPartialWords. No SetMaxAlternatives.
-        # Those force word-align on a short lattice and Kaldi discards the last word.
-    if end:
+    try:
+        model = Model(model_path)
+    except Exception as exc:  # noqa: BLE001
+        while True:
+            job = in_q.get()
+            if job is None:
+                return
+            out_q.put({"ok": False, "seated": False, "error": str(exc), "engine": "vosk"})
+        return
+    rec = None
+    held = 0
+    while True:
+        job = in_q.get()
+        if job is None:
+            return
+        jid, op, pcm = job
         try:
-            _live_rec.AcceptWaveform(SILENCE_TAIL)
+            if op == "reset" or rec is None:
+                rec = KaldiRecognizer(model, 16000)
+                rec.SetWords(True)
+                held = 0
+                if op == "reset":
+                    out_q.put(_live_packet(False, job=jid))
+                    continue
+            if op == "end":
+                text = ""
+                payload: dict = {}
+                if rec is not None:
+                    try:
+                        rec.AcceptWaveform(SILENCE_TAIL)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    payload = json.loads(rec.FinalResult() or "{}")
+                    text = (payload.get("text") or "").strip()
+                    rec = None
+                    held = 0
+                out_q.put(_live_packet(True, text=text, payload=payload, job=jid))
+                continue
+            if not pcm:
+                out_q.put(_live_packet(False, job=jid))
+                continue
+            if rec.AcceptWaveform(pcm):
+                payload = json.loads(rec.Result() or "{}")
+                text = (payload.get("text") or "").strip()
+                out_q.put(_live_packet(True, text=text, payload=payload, job=jid))
+                rec = KaldiRecognizer(model, 16000)
+                rec.SetWords(True)
+                held = 0
+            else:
+                held += len(pcm)
+                # Long listen without an endpoint balloons the lattice (~50MB) and the ear goes dumb.
+                if held >= 16000 * 2 * 8:
+                    try:
+                        rec.AcceptWaveform(SILENCE_TAIL)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    payload = json.loads(rec.FinalResult() or "{}")
+                    text = (payload.get("text") or "").strip()
+                    rec = KaldiRecognizer(model, 16000)
+                    rec.SetWords(True)
+                    held = 0
+                    out_q.put(_live_packet(True, text=text, payload=payload, job=jid))
+                else:
+                    payload = json.loads(rec.PartialResult() or "{}")
+                    partial = (payload.get("partial") or "").strip()
+                    out_q.put(_live_packet(False, partial=partial, payload=payload, job=jid))
         except Exception:  # noqa: BLE001
-            pass
-        final = json.loads(_live_rec.FinalResult() or "{}")
-        _live_rec = None
-        text = (final.get("text") or "").strip()
-        return dress(
-            {
-                "ok": True,
-                "final": True,
-                "text": text,
-                "partial": "",
-                "words": words_from(final),
-                "engine": "vosk",
-                "organ": "filament",
-                "cloud": False,
-                "seated": True,
-            },
-            final,
-        )
-    if not pcm:
-        return {"ok": True, "final": False, "text": "", "partial": "", "words": [], "seated": True}
-    if _live_rec.AcceptWaveform(pcm):
-        result = json.loads(_live_rec.Result() or "{}")
-        text = (result.get("text") or "").strip()
-        return dress(
-            {
-                "ok": True,
-                "final": True,
-                "text": text,
-                "partial": "",
-                "words": words_from(result),
-                "engine": "vosk",
-                "organ": "filament",
-                "cloud": False,
-                "seated": True,
-            },
-            result,
-        )
-    partial = json.loads(_live_rec.PartialResult() or "{}")
-    return dress(
-        {
+            rec = None
+            held = 0
+            out_q.put(_live_packet(False, job=jid))
+
+
+def _ensure_live_worker() -> None:
+    global _live_in, _live_out, _live_proc
+    if _live_proc is not None and _live_proc.is_alive():
+        return
+    ctx = mp.get_context("spawn")
+    _live_in = ctx.Queue()
+    _live_out = ctx.Queue()
+    _live_proc = ctx.Process(
+        target=_kaldi_worker,
+        args=(MODEL_PATH, _live_in, _live_out),
+        daemon=True,
+    )
+    _live_proc.start()
+
+
+def live_hear(pcm: bytes, reset: bool = False, end: bool = False) -> dict:
+    """Live PCM into Vosk. Not a tape. Not a clip."""
+    global _live_proc, _live_in, _live_out, _live_job
+    if seat_model() is None:
+        return {"ok": False, "seated": False, "error": _model_error, "engine": "vosk"}
+    _ensure_live_worker()
+    op = "reset" if reset else "end" if end else "pcm"
+    _live_job += 1
+    jid = _live_job
+    try:
+        _live_in.put((jid, op, pcm or b""))
+        deadline = __import__("time").time() + 2.5
+        while True:
+            left = deadline - __import__("time").time()
+            if left <= 0:
+                raise queue.Empty
+            got = _live_out.get(timeout=left)
+            if int(got.get("job") or 0) == jid:
+                return got
+    except queue.Empty:
+        return {
             "ok": True,
             "final": False,
             "text": "",
-            "partial": (partial.get("partial") or "").strip(),
-            "words": words_from(partial),
+            "partial": "",
+            "words": [],
             "engine": "vosk",
-            "organ": "filament",
-            "cloud": False,
             "seated": True,
-        },
-        partial,
-    )
+        }
+    except Exception:  # noqa: BLE001
+        try:
+            if _live_proc is not None:
+                _live_proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
+        _live_proc = None
+        _live_in = None
+        _live_out = None
+        return {
+            "ok": True,
+            "final": False,
+            "text": "",
+            "partial": "",
+            "words": [],
+            "engine": "vosk",
+            "seated": True,
+        }
 
 
 def extract_file(headers: dict[str, str], body: bytes) -> bytes:
@@ -271,12 +375,15 @@ class Ear(BaseHTTPRequestHandler):
 
     def _json(self, code: int, payload: dict) -> None:
         raw = json.dumps(payload).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(raw)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(raw)
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(raw)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return
 
     def _file(self, path: Path, ctype: str) -> None:
         raw = path.read_bytes() if path.is_file() else b""

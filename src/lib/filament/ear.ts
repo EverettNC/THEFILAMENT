@@ -6,6 +6,7 @@ export const FILAMENT_GITHUB = "https://github.com/EverettNC/THEFILAMENT";
 export const FILAMENT_DOOR = 4850;
 export const FILAMENT_DEFAULT_EAR = `http://127.0.0.1:${FILAMENT_DOOR}/stt`;
 export const FILAMENT_HEALTH = `http://127.0.0.1:${FILAMENT_DOOR}/health`;
+export const FILAMENT_LIVE = `http://127.0.0.1:${FILAMENT_DOOR}/live`;
 export const UNSEATED =
   "Filament ear is unseated. Seat Vosk on :4850 (EverettNC/THEFILAMENT). Empty ear stays empty. No invented speech.";
 export const EAR_UNSEATED_FACE =
@@ -17,7 +18,13 @@ export function faceEarError(error: string): string {
 }
 
 export function filamentEarUrl(): string {
-  return (process.env.FILAMENT_EAR_URL || process.env.PORCH_EAR_URL || "").trim();
+  const env = typeof process !== "undefined" ? process.env : undefined;
+  return (env?.FILAMENT_EAR_URL || env?.PORCH_EAR_URL || "").trim();
+}
+
+export function filamentLiveUrl(): string {
+  const ear = filamentEarUrl() || FILAMENT_DEFAULT_EAR;
+  return ear.replace(/\/stt\/?$/, "/live").replace(/\/transcribe\/?$/, "/live");
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

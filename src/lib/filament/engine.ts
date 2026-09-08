@@ -1,6 +1,8 @@
 import { SYLLABLES } from "./syllables";
 import type { AudioBus, SttWord } from "./types";
 
+export { getFilamentEngine, type FilamentLiveEngine } from "./live.ts";
+
 type Fiber = {
   a: number;
   len: number;

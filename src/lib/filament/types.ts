@@ -50,3 +50,10 @@ export type TranscribeErr = {
 };
 
 export type TranscribeResult = TranscribeOk | TranscribeErr;
+
+export type HearResult = {
+  text: string;
+  partial?: string;
+  final?: boolean;
+  words?: SttWord[];
+};

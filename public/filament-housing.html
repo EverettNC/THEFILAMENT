@@ -35,6 +35,7 @@
 
   #as-said{position:fixed;left:24px;right:24px;bottom:86px;max-width:48rem;pointer-events:none;font-size:13px;color:var(--paper);text-shadow:0 0 12px #000}
   #as-said .partial{color:var(--dim);font-style:italic}
+  html.embedded #title, html.embedded #readout, html.embedded #legend, html.embedded #listen{display:none!important}
 </style>
 </head>
 <body>
@@ -70,7 +71,7 @@
     <a href="/bare">Field</a>
     <a href="/live.html">Live</a>
   </nav>
-  <button id="train" type="button" aria-pressed="true">Train</button>
+  <button id="train" type="button" aria-pressed="false">Train</button>
   <button id="btn" type="button" disabled>Hold</button>
   <div class="st" id="st">probing ear</div>
 </div>
@@ -97,8 +98,11 @@
   ];
 
   const regionEl=document.getElementById('region');
-  const fil=[], syl=[], labels=[];
+  const fil=[], syl=[];
   let caught=0, slipped=0, t=0, spin=0;
+  const MAX_SYL = 8;
+  const embedded = window !== window.top;
+  if (embedded) document.documentElement.classList.add('embedded');
 
   function report(){
     const total=caught+slipped;
@@ -106,14 +110,19 @@
     scountEl.textContent=caught.toLocaleString();
     if(missEl) missEl.textContent=slipped.toLocaleString();
     if(pctEl) pctEl.textContent=total?pct+'%':'—';
-    window.filamentStats={caught,slipped,pct,total};
+    window.filamentStats={caught,slipped,pct,total,filaments:FIL};
   }
 
   function resize(){
     DPR=Math.min(window.devicePixelRatio||1,2);
     W=c.clientWidth; H=c.clientHeight;
     c.width=W*DPR; c.height=H*DPR; x.setTransform(DPR,0,0,DPR,0,0);
-    CX=W/2; CY=H/2; S=Math.min(W,H)*0.30;
+    const rail = embedded ? Math.min(W * 0.30, 320) : 0;
+    const hud = embedded ? 168 : 0;
+    const room = Math.max(240, W - rail - hud);
+    CX = rail + room / 2;
+    CY = H / 2;
+    S = Math.min(room, H) * 0.26;
     build();
   }
 
@@ -181,6 +190,7 @@
       text:tok, held:false});
     const lang = window.filamentLang || (window.FILAMENT_LANG_FOR && window.FILAMENT_LANG_FOR(tok)) || "en-US";
     window.filamentNextAt = performance.now() + ((window.FILAMENT_GAP && window.FILAMENT_GAP()) || 1200);
+    if (window.filamentLive) return;
     if (window.parent && window.parent !== window) {
       window.parent.postMessage({ type: "filament-token", token: tok, region: window.filamentRegion, lang: lang }, "*");
     } else if (window.FILAMENT_SPEAK) {
@@ -237,19 +247,11 @@
     ring(LH, RH, 'rgba(143,163,181,0.62)', 1.4);
     ring(LH, RH*0.955, 'rgba(143,163,181,0.20)', 0.7);
 
-    x.font='11px ui-monospace,Menlo,monospace';
-    for(let i=labels.length-1;i>=0;i--){
-      const L=labels[i]; L.life-=0.008; L.y-=0.2;
-      if(L.life<=0){labels.splice(i,1);continue;}
-      x.fillStyle=`rgba(248,255,42,${L.life*0.9})`;
-      x.fillText(L.text,L.x+6,L.y);
-    }
-
-    if(!window.filamentLive && window.filamentTrain!==false){
-      const gated = window !== window.top
+    if(!window.filamentLive && window.filamentTrain===true){
+      const gated = embedded
         ? performance.now() < (window.filamentNextAt || 0)
         : (window.FILAMENT_BUSY && window.FILAMENT_BUSY());
-      if(!gated) spawn();
+      if(!gated && syl.length < MAX_SYL) spawn();
     }
     requestAnimationFrame(tick);
   }
@@ -266,7 +268,7 @@
           if(!s.held){
             slipped++; report();
             if (window.parent && window.parent !== window) {
-              window.parent.postMessage({ type: "filament-slipped", token: s.text, region: window.filamentRegion || "" }, "*");
+              window.parent.postMessage({ type: "filament-slipped", token: s.text, region: window.filamentLive ? "" : (window.filamentRegion || "") }, "*");
             }
           }
           syl.splice(i,1);
@@ -279,21 +281,23 @@
       if(inBarrel){
         if(!s.held){
           s.held=true; caught++; report();
-          labels.push({x:p.X,y:p.Y,text:s.text,life:1});
           if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: "filament-caught", token: s.text, region: window.filamentRegion || "" }, "*");
+            window.parent.postMessage({ type: "filament-caught", token: s.text, region: window.filamentLive ? "" : (window.filamentRegion || "") }, "*");
           }
         }
       }
-      const size = Math.max(11, 16*p.d);
-      x.font = size+'px ui-monospace,Menlo,monospace';
-      x.fillStyle=s.held?'rgba(248,255,42,0.95)':`rgba(223,233,242,${0.26+0.34*p.d})`;
-      x.fillText(s.text, p.X, p.Y);
+      const rail = embedded ? Math.min(W * 0.30, 320) : 0;
+      if (p.X > rail + 12 && p.X < W - 160) {
+        const size = Math.max(11, 15*p.d);
+        x.font = size+'px ui-monospace,Menlo,monospace';
+        x.fillStyle=s.held?'rgba(248,255,42,0.95)':`rgba(223,233,242,${0.26+0.34*p.d})`;
+        x.fillText(s.text, p.X, p.Y);
+      }
       if(Math.hypot(s.x,s.y)>RH*2.6 || Math.abs(s.z)>LH*2.2){
         if(!s.held){
           slipped++; report();
           if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: "filament-slipped", token: s.text, region: window.filamentRegion || "" }, "*");
+            window.parent.postMessage({ type: "filament-slipped", token: s.text, region: window.filamentLive ? "" : (window.filamentRegion || "") }, "*");
           }
         }
         syl.splice(i,1);
@@ -303,7 +307,9 @@
 
   window.addEventListener('resize',resize);
   resize();
-  for(let i=0;i<4;i++) spawn();
+  window.filamentQuiet = function(){
+    syl.length = 0;
+  };
   window.filamentCatch = function(text){
     if(!text) return;
     const tok = String(text).trim();
@@ -320,12 +326,12 @@
   if (window !== window.top) {
     const hud = document.getElementById('listen');
     if (hud) hud.style.display = 'none';
-    window.filamentTrain = window.filamentTrain !== false;
+    window.filamentTrain = window.filamentTrain === true;
     return;
   }
   const EAR = location.port === '4850' ? '' : 'http://127.0.0.1:4850';
 
-  window.filamentTrain = true;
+  window.filamentTrain = false;
   const trainBtn=document.getElementById('train');
   if(trainBtn){
     trainBtn.addEventListener('click',()=>{

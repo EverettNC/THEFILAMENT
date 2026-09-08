@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { FILAMENT_VIEWS, type FilamentView } from "@/components/filament/filament-stage";
 import { feedFilamentCatch, feedNewCatchTokens, setFilamentLive } from "@/lib/filament/catch";
+import { faceEarError } from "@/lib/filament/ear";
 import { nextDialectStim } from "@/lib/filament/syllables";
-import type { FilamentEngine } from "@/lib/filament/engine";
+import type { FilamentLiveEngine } from "@/lib/filament/engine";
 import type { AudioBus } from "@/lib/filament/types";
 import { cn } from "@/lib/utils";
 
@@ -12,7 +13,7 @@ type Stats = { caught: number; slipped: number; pct: number; total: number };
 const MIC_DENIED = "mic denied";
 const EMPTY_STATS: Stats = { caught: 0, slipped: 0, pct: 0, total: 0 };
 
-async function filament(): Promise<FilamentEngine> {
+async function filament(): Promise<FilamentLiveEngine> {
   const { getFilamentEngine } = await import("@/lib/filament/engine");
   return getFilamentEngine();
 }
@@ -34,7 +35,7 @@ export function FilamentEar({
   const [partial, setPartial] = useState("");
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
 
-  const engineRef = useRef<FilamentEngine | null>(null);
+  const engineRef = useRef<FilamentLiveEngine | null>(null);
   const busRef = useRef<AudioBus>(emptyBus());
   const seenRef = useRef(0);
   const finalsRef = useRef<string[]>([]);
@@ -62,7 +63,7 @@ export function FilamentEar({
       .catch((err: unknown) => {
         if (!live) return;
         setPhase("failed");
-        setNote(err instanceof Error ? err.message : "unseated");
+        setNote(faceEarError(err instanceof Error ? err.message : "unseated"));
       });
     return () => {
       live = false;

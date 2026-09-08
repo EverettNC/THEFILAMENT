@@ -3,7 +3,15 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { FILAMENT_DOOR, FILAMENT_GITHUB, pickText, pickWords, UNSEATED } from "./ear.ts";
+import {
+  FILAMENT_DOOR,
+  FILAMENT_GITHUB,
+  FILAMENT_LIVE,
+  filamentLiveUrl,
+  pickText,
+  pickWords,
+  UNSEATED,
+} from "./ear.ts";
 import { DIALECT_MAP, dialectTokens, nextDialectStim } from "./syllables.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -11,6 +19,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 describe("filament ear", () => {
   it("keeps the cochlea in THEFILAMENT and Vosk on 4850", () => {
     assert.equal(FILAMENT_DOOR, 4850);
+    assert.equal(FILAMENT_LIVE, "http://127.0.0.1:4850/live");
+    assert.equal(filamentLiveUrl(), "http://127.0.0.1:4850/live");
     assert.match(FILAMENT_GITHUB, /THEFILAMENT/);
     assert.match(UNSEATED, /Empty ear stays empty/);
     assert.doesNotMatch(UNSEATED, /whisper/i);

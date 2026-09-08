@@ -9,10 +9,13 @@ Not the small 0.15. Whisper is not in this body.
 On Everett's machine the model already lives unpacked:
 
 ```
-/Users/EverettN/Downloads/vosk-model-en-us-0.22-lgraph
+/Users/EverettN/models/vosk-model-en-us-0.22-lgraph
 ```
 
-The ear looks there first, then `./models/…`, then `VOSK_MODEL_PATH`.
+The ear looks there first (`VOSK_MODEL_PATH`, then Downloads, then that path, then `./models/…`). Whisper is not a fallback. If 4850 dies, it restarts. It does not hand the ear to something else.
+
+LaunchAgent: `~/Library/LaunchAgents/com.thechristmanai.filament.plist`  
+KeepAlive. Local Vosk only. Door 4850.
 
 ```bash
 pip install vosk

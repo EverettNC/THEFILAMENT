@@ -1,10 +1,8 @@
 #!/bin/sh
 set -eu
-cd /workspace
-# :8081 is QA-only — a revive must never inherit a stale built-output preview.
-# Called directly, not via npm: no node_modules needed, so nothing to wait for.
-node scripts/preview.mjs stop || true
-if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8080/; then
+cd "$(dirname "$0")"
+# Filament is 4850. Local Vosk. Empty ear stays empty.
+if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:4850/health; then
   exit 0
 fi
-npm run dev >>/tmp/app-startup.log 2>&1 &
+npm run dev >>/tmp/filament-ear.log 2>&1 &

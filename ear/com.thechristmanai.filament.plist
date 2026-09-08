@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.thechristmanai.filament</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/EverettN/mcp-media-ingestor/.venv/bin/python</string>
+        <string>/Users/EverettN/THEFILAMENT/ear/vosk_ear.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/EverettN/THEFILAMENT/ear</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>VOSK_MODEL_PATH</key>
+        <string>/Users/EverettN/models/vosk-model-en-us-0.22-lgraph</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/EverettN/Library/Logs/filament_ear.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/EverettN/Library/Logs/filament_ear.err</string>
+</dict>
+</plist>

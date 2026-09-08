@@ -275,7 +275,7 @@
       x.fillText(L.text, L.x + 6, L.y);
     }
 
-    if(!window.filamentLive && window.filamentTrain!==false){
+    if(!window.filamentLive && window.filamentTrain===true){
       const busy = window !== window.top
         ? performance.now() < (window.filamentNextAt || 0)
         : (window.FILAMENT_BUSY ? window.FILAMENT_BUSY() : false);
@@ -305,12 +305,12 @@
   if (window !== window.top) {
     const hud = document.getElementById('listen');
     if (hud) hud.style.display = 'none';
-    window.filamentTrain = window.filamentTrain !== false;
+    window.filamentTrain = window.filamentTrain === true;
     return;
   }
   const EAR = location.port === '4850' ? '' : 'http://127.0.0.1:4850';
 
-  window.filamentTrain = true;
+  window.filamentTrain = false;
   const trainBtn=document.getElementById('train');
   if(trainBtn){
     trainBtn.addEventListener('click',()=>{
