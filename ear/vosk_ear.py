@@ -246,31 +246,38 @@ def _kaldi_worker(model_path: str, in_q, out_q) -> None:
             if not pcm:
                 out_q.put(_live_packet(False, job=jid))
                 continue
-            if rec.AcceptWaveform(pcm):
-                payload = json.loads(rec.Result() or "{}")
+            # Fast talk fills one POST. Feed Kaldi in 4000-byte bites so it can endpoint.
+            # Four seconds without an endpoint balloons the lattice and the ear goes dumb.
+            HOLD_MAX = 16000 * 2 * 4
+            CHUNK = 4000
+            forced = False
+            accepted = False
+            payload: dict = {}
+            for i in range(0, len(pcm), CHUNK):
+                piece = pcm[i : i + CHUNK]
+                if rec.AcceptWaveform(piece):
+                    payload = json.loads(rec.Result() or "{}")
+                    accepted = True
+                    break
+                held += len(piece)
+                if held >= HOLD_MAX:
+                    try:
+                        rec.AcceptWaveform(SILENCE_TAIL)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    payload = json.loads(rec.FinalResult() or "{}")
+                    forced = True
+                    break
+            if accepted or forced:
                 text = (payload.get("text") or "").strip()
                 out_q.put(_live_packet(True, text=text, payload=payload, job=jid))
                 rec = KaldiRecognizer(model, 16000)
                 rec.SetWords(True)
                 held = 0
             else:
-                held += len(pcm)
-                # Long listen without an endpoint balloons the lattice (~50MB) and the ear goes dumb.
-                if held >= 16000 * 2 * 8:
-                    try:
-                        rec.AcceptWaveform(SILENCE_TAIL)
-                    except Exception:  # noqa: BLE001
-                        pass
-                    payload = json.loads(rec.FinalResult() or "{}")
-                    text = (payload.get("text") or "").strip()
-                    rec = KaldiRecognizer(model, 16000)
-                    rec.SetWords(True)
-                    held = 0
-                    out_q.put(_live_packet(True, text=text, payload=payload, job=jid))
-                else:
-                    payload = json.loads(rec.PartialResult() or "{}")
-                    partial = (payload.get("partial") or "").strip()
-                    out_q.put(_live_packet(False, partial=partial, payload=payload, job=jid))
+                payload = json.loads(rec.PartialResult() or "{}")
+                partial = (payload.get("partial") or "").strip()
+                out_q.put(_live_packet(False, partial=partial, payload=payload, job=jid))
         except Exception:  # noqa: BLE001
             rec = None
             held = 0
