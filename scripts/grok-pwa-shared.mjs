@@ -6,8 +6,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const DEFAULT_APP_NAME = "Grok App";
-export const OG_SERVICE_URL_DEFAULT = "https://og.grok.me";
+export const DEFAULT_APP_NAME = "Everett app";
+export const OG_SERVICE_URL_DEFAULT = "https://thechristmanai.com";
 export const OG_SITE_REL_PATH = "src/lib/og/site.json";
 
 const SHARE_META_KEYS = new Set([
