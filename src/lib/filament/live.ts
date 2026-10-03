@@ -44,7 +44,9 @@ function energyOf(samples: Float32Array): number {
 }
 
 function livePost(pcm: Int16Array, query = ""): Promise<Record<string, unknown>> {
-  const bytes = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength);
+  // Copy the samples into a plain ArrayBuffer so fetch accepts it as a body.
+  const bytes = new Uint8Array(pcm.byteLength);
+  bytes.set(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength));
   return fetch(`${filamentLiveUrl()}${query}`, {
     method: "POST",
     headers: { "content-type": "application/octet-stream" },

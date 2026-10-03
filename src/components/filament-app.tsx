@@ -368,7 +368,7 @@ export function FilamentApp() {
           <span aria-hidden="true">·</span>
           <span>space to listen</span>
           <span aria-hidden="true">·</span>
-          <span>Grok STT</span>
+          <span>Filament ear · local</span>
         </div>
         {error ? (
           <p className="max-w-sm px-4 text-center font-sans text-sm text-hot" role="alert">

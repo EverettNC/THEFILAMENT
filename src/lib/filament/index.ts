@@ -1,6 +1,6 @@
 export { createMic, MAX_SECONDS } from "./mic";
 export type { MicHandle } from "./mic";
-export { encodeWav, concatFloat32, blobToBase64, resampleMono, mixToMono, downsample } from "./wav";
+export { encodeWav, concatFloat32, blobToBase64, downsample } from "./wav";
 export { SAMPLE_CATCH, KEYTERMS, SYLLABLES, DIALECT_STIM, DIALECT_MAP, DIALECT_ORDER, dialectTokens, nextDialectStim } from "./syllables";
 export {
   FILAMENT_DOOR,

@@ -7,3 +7,15 @@ models/
 vosk-model*/
 *.zip
 __pycache__/
+
+# build output, never committed
+.vercel/
+.output/
+.nitro/
+dist/
+
+# Mac
+.DS_Store
+
+# screen-capture frames are not Filament source
+screenshots/watch-meter*/
