@@ -553,10 +553,12 @@ class Ear(BaseHTTPRequestHandler):
 
 def main() -> None:
     seated = seat_model() is not None
-    print(f"Filament ear on 0.0.0.0:{DOOR}  vosk={'seated' if seated else 'UNSEATED'}")
+    # Standing rule: the ear listens on this machine only. Never the wildcard.
+    host = "127.0.0.1"
+    print(f"Filament ear on {host}:{DOOR}  vosk={'seated' if seated else 'UNSEATED'}")
     if not seated:
         print(_model_error)
-    ThreadingHTTPServer(("0.0.0.0", DOOR), Ear).serve_forever()
+    ThreadingHTTPServer((host, DOOR), Ear).serve_forever()
 
 
 if __name__ == "__main__":
