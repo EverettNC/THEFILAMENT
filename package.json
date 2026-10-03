@@ -10,7 +10,6 @@
     "dev": "cd ear && VOSK_MODEL_PATH=/Users/EverettN/models/vosk-model-en-us-0.22-lgraph /Users/EverettN/mcp-media-ingestor/.venv/bin/python vosk_ear.py",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test src/lib/filament/ear.test.ts src/lib/filament/catch.test.ts src/lib/filament/live.test.ts",
     "lint": "eslint .",

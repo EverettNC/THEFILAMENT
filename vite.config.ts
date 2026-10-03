@@ -11,11 +11,6 @@ export default defineConfig({
     port: 4850,
     strictPort: true,
   },
-  preview: {
-    host: "127.0.0.1",
-    port: 8081,
-    strictPort: true,
-  },
   resolve: { tsconfigPaths: true },
   plugins: [tailwindcss(), tanstackStart(), viteReact()],
 });
