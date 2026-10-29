@@ -40,12 +40,11 @@ def resolve_model_path() -> str:
 
 MODEL_PATH = resolve_model_path()
 
-_model = None
 _model_error = None
-_live_in = None
-_live_out = None
-_live_proc = None
-_live_job = 0
+#: How long the door waits for the worker to seat the model.
+SEAT_WAIT_S = float(os.environ.get("FILAMENT_SEAT_WAIT_S", "120"))
+#: How long a whole tape on /stt may take in the worker.
+TAPE_WAIT_S = float(os.environ.get("FILAMENT_TAPE_WAIT_S", "600"))
 
 
 UI_PATH = Path(__file__).resolve().parent / "ui.html"
@@ -57,24 +56,15 @@ MAP_PATH = Path(__file__).resolve().parent / "dialect-map.js"
 
 
 def seat_model():
-    global _model, _model_error
-    if _model is not None:
-        return _model
-    try:
-        from vosk import Model  # type: ignore
-    except ImportError:
-        _model_error = "Vosk is not installed. pip install vosk. Empty ear stays empty."
-        return None
+    """The model sits once, in the worker. The door only asks whether it sat."""
+    global _model_error
     if not Path(MODEL_PATH).is_dir():
         _model_error = f"Vosk model is not seated at {MODEL_PATH}. Empty ear stays empty."
         return None
-    try:
-        _model = Model(MODEL_PATH)
-        _model_error = None
-        return _model
-    except Exception as exc:  # noqa: BLE001
-        _model_error = f"Vosk would not sit: {exc}. Empty ear stays empty."
-        return None
+    hub = _live_hub()
+    ok, err = hub.seated(SEAT_WAIT_S)
+    _model_error = None if ok else (err or "Vosk did not sit in time. Empty ear stays empty.")
+    return hub if ok else None
 
 
 def ffmpeg_bin() -> str:
@@ -141,19 +131,14 @@ SILENCE_TAIL = b"\x00" * (16000 * 2 // 2)  # 0.5s. Last word needs room to align
 
 
 def hear(pcm: bytes) -> dict:
-    from vosk import KaldiRecognizer, SetLogLevel  # type: ignore
-
-    SetLogLevel(-1)
-    model = seat_model()
-    if model is None:
+    hub = seat_model()
+    if hub is None:
         return {"ok": False, "error": _model_error, "seated": False}
-    rec = KaldiRecognizer(model, 16000)
-    rec.SetWords(True)
-    padded = pcm + SILENCE_TAIL
-    chunk = 4000
-    for i in range(0, len(padded), chunk):
-        rec.AcceptWaveform(padded[i : i + chunk])
-    final = json.loads(rec.FinalResult() or "{}")
+    _jid, reply = hub.call("", "tape", pcm, TAPE_WAIT_S)
+    if reply is None or reply.get("error"):
+        why = (reply or {}).get("error") or "The ear did not finish that tape. Empty ear stays empty."
+        return {"ok": False, "error": why, "seated": True}
+    final = reply.get("payload") or {}
     text = (final.get("text") or "").strip()
     if not text:
         alts = final.get("alternatives") or []
@@ -283,26 +268,58 @@ def session_of(value: str | None) -> str:
     return value if _SESSION_OK.match(value) else ""
 
 
-def _ear_worker(model_path: str, in_q, out_q) -> None:
-    """Own process. If the recognizer aborts, the HTTP door stays up."""
-    from vosk import Model, SetLogLevel  # type: ignore
+def _tape_job(model, pcm: bytes) -> dict:
+    """A whole tape for /stt: its own recognizer, 0.5 s of silence after it."""
+    from vosk import KaldiRecognizer  # type: ignore
 
-    SetLogLevel(-1)
+    rec = KaldiRecognizer(model, 16000)
+    rec.SetWords(True)
+    padded = pcm + SILENCE_TAIL
+    for i in range(0, len(padded), CHUNK):
+        rec.AcceptWaveform(padded[i : i + CHUNK])
+    return {"final": True, "tape": True, "payload": json.loads(rec.FinalResult() or "{}")}
+
+
+def _run_tape(model, jid: int, sid: str, pcm: bytes, out_q) -> None:
     try:
-        model = Model(model_path)
+        reply = _tape_job(model, pcm)
     except Exception as exc:  # noqa: BLE001
+        reply = {"tape": True, "error": f"The ear could not hear that tape: {exc}."}
+    out_q.put(("reply", jid, sid, reply))
+
+
+def _ear_worker(model_path: str, in_q, out_q) -> None:
+    """Own process, and the only place the model sits. If the recognizer
+    aborts, the HTTP door stays up."""
+    try:
+        from vosk import Model, SetLogLevel  # type: ignore
+
+        SetLogLevel(-1)
+        model = Model(model_path)
+    except ImportError:
+        why = "Vosk is not installed. pip install vosk. Empty ear stays empty."
+        model = None
+    except Exception as exc:  # noqa: BLE001
+        why = f"Vosk would not sit: {exc}. Empty ear stays empty."
+        model = None
+    if model is None:
+        out_q.put(("seat", False, why))
         while True:
             job = in_q.get()
             if job is None:
                 return
-            out_q.put(("reply", job[0], job[1], {"error": str(exc)}))
-        return
+            out_q.put(("reply", job[0], job[1], {"error": why}))
+    out_q.put(("seat", True, None))
     streams: dict[str, dict] = {}
     while True:
         job = in_q.get()
         if job is None:
             return
         jid, sid, op, pcm = job
+        if op == "tape":
+            # A tape runs beside the live streams, so a long tape never holds up live words.
+            threading.Thread(target=_run_tape, args=(model, jid, sid, pcm or b"", out_q), daemon=True).start()
+            continue
         state = streams.pop(sid, None) or {"rec": None, "held": 0}
         streams[sid] = state  # most recently used last
         while len(streams) > MAX_STREAMS:
@@ -337,6 +354,7 @@ class LiveHub:
         self._waiting: set[int] = set()
         self._replies: dict[int, dict] = {}
         self._late: dict[str, list[dict]] = {}
+        self._seat: tuple[bool, str | None] | None = None
 
     def _ensure(self) -> None:
         with self._cv:
@@ -348,6 +366,7 @@ class LiveHub:
             proc = ctx.Process(target=_ear_worker, args=(self.model_path, in_q, out_q), daemon=True)
             proc.start()
             self._gen += 1
+            self._seat = None
             self._proc, self._in = proc, in_q
             threading.Thread(target=self._read, args=(out_q, self._gen), daemon=True).start()
 
@@ -361,11 +380,19 @@ class LiveHub:
                 continue
             except (EOFError, OSError):
                 return
+            if msg[0] == "seat":
+                with self._cv:
+                    if gen == self._gen:
+                        self._seat = (bool(msg[1]), msg[2])
+                    self._cv.notify_all()
+                continue
             _kind, jid, sid, reply = msg
             with self._cv:
                 if jid in self._waiting:
                     self._replies[jid] = reply
                     self._cv.notify_all()
+                elif reply.get("tape"):
+                    continue
                 elif reply.get("final") and str(reply.get("text") or "").strip():
                     self._late.setdefault(sid, []).append(reply)
 
@@ -387,6 +414,20 @@ class LiveHub:
                 self._cv.wait(min(left, 0.5))
             self._waiting.discard(jid)
             return jid, self._replies.pop(jid)
+
+    def seated(self, wait_s: float) -> tuple[bool, str | None]:
+        """Start the worker if it is not running, and wait for it to seat the model."""
+        self._ensure()
+        deadline = time.monotonic() + wait_s
+        with self._cv:
+            while self._seat is None:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return False, "Vosk did not sit in time. Empty ear stays empty."
+                if self._proc is None or not self._proc.is_alive():
+                    return False, "The ear's worker stopped before the model sat. Empty ear stays empty."
+                self._cv.wait(min(left, 0.5))
+            return self._seat
 
     def restart(self) -> None:
         with self._cv:
