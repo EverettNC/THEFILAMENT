@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import threading
 import unittest
+import urllib.parse
 import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -72,7 +73,8 @@ class OneStreamPerCaller(unittest.TestCase):
                 url = f"http://127.0.0.1:{SPARE_PORT}/live" + (f"?{q}" if q else "")
                 headers = {"Content-Type": "application/octet-stream"}
                 if sid == "alpha":
-                    url += ("&" if q else "?") + "session=alpha"
+                    # percent-encoded, as a browser's URL tools may send it
+                    url += ("&" if q else "?") + "session=" + urllib.parse.quote("codec-war:alpha", safe="")
                 else:
                     headers["X-Filament-Session"] = sid
                 req = urllib.request.Request(url, data=chunk, headers=headers, method="POST")

@@ -19,7 +19,7 @@ import time
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from mouth import CONF_FLOOR, dress, load_carbon, save_carbon, shape_words
 from board import add_family, add_residual, snapshot
@@ -661,7 +661,7 @@ class Ear(BaseHTTPRequestHandler):
                 except Exception as exc:  # noqa: BLE001
                     self._json(400, {"ok": False, "error": str(exc)})
                     return
-            session = params.get("session") or self.headers.get("X-Filament-Session") or ""
+            session = unquote(params.get("session") or "") or self.headers.get("X-Filament-Session") or ""
             result = live_hear(pcm, reset=reset, end=end, session=session)
             self._json(200 if result.get("ok") else 503, result)
             return

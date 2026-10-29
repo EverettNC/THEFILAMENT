@@ -43,11 +43,29 @@ function energyOf(samples: Float32Array): number {
   return Math.min(1, Math.sqrt(sum / Math.max(1, samples.length)) * 8);
 }
 
+/** A stream name for one open page, made once when the page loads. */
+export function newLiveSession(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  const id =
+    c && typeof c.randomUUID === "function"
+      ? c.randomUUID()
+      : `${Date.now().toString(36)}-${Math.floor(Math.random() * 2 ** 48).toString(36)}`;
+  return `filament-app:${id}`;
+}
+
+/** This page's stream: the door keeps its words apart from every other caller's. */
+export const LIVE_SESSION = newLiveSession();
+
+/** The query for one /live post, with this page's stream name on it. */
+export function liveQuery(query = "", session = LIVE_SESSION): string {
+  return `${query ? `${query}&` : "?"}session=${session}`;
+}
+
 function livePost(pcm: Int16Array, query = ""): Promise<Record<string, unknown>> {
   // Copy the samples into a plain ArrayBuffer so fetch accepts it as a body.
   const bytes = new Uint8Array(pcm.byteLength);
   bytes.set(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength));
-  return fetch(`${filamentLiveUrl()}${query}`, {
+  return fetch(`${filamentLiveUrl()}${liveQuery(query)}`, {
     method: "POST",
     headers: { "content-type": "application/octet-stream" },
     body: bytes,

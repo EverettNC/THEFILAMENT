@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { FILAMENT_DOOR, FILAMENT_LIVE, filamentLiveUrl } from "./ear.ts";
-import { getFilamentEngine, liveDoor, LIVE_CHUNK, pcm16Downsample } from "./live.ts";
+import {
+  getFilamentEngine,
+  liveDoor,
+  LIVE_CHUNK,
+  LIVE_SESSION,
+  liveQuery,
+  newLiveSession,
+  pcm16Downsample,
+} from "./live.ts";
 
 describe("filament live ear", () => {
   it("sits local Vosk on 4850, not vosk-browser", () => {
@@ -20,5 +28,14 @@ describe("filament live ear", () => {
     assert.equal(pcm.length, 16000);
     assert.equal(LIVE_CHUNK, 3200);
     assert.ok(pcm[0] > 0);
+  });
+
+  it("every /live post carries this page's own stream name", () => {
+    assert.match(LIVE_SESSION, /^filament-app:[A-Za-z0-9_.:-]{1,51}$/);
+    assert.equal(liveQuery("?reset=1"), `?reset=1&session=${LIVE_SESSION}`);
+    assert.equal(liveQuery(""), `?session=${LIVE_SESSION}`);
+    assert.equal(liveQuery("?end=1"), `?end=1&session=${LIVE_SESSION}`);
+    const names = new Set(Array.from({ length: 100 }, () => newLiveSession()));
+    assert.equal(names.size, 100, "every page load gets its own name");
   });
 });
