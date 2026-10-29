@@ -309,6 +309,9 @@
     return;
   }
   const EAR = location.port === '4850' ? '' : 'http://127.0.0.1:4850';
+  // One stream per open page: the door keeps this page's words apart from every other caller's.
+  const SESSION = 'filament-live:' + (crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + '-' + Math.floor(Math.random() * 2 ** 48).toString(36));
+  const LQ = (q) => (q ? q + '&' : '?') + 'session=' + SESSION;
 
   window.filamentTrain = false;
   const trainBtn=document.getElementById('train');
@@ -338,7 +341,7 @@
   function post(pcm,q){
     queue=queue.then(async()=>{
       const bytes = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength);
-      const res=await fetch(EAR+'/live'+(q||''),{method:'POST',headers:{'content-type':'application/octet-stream'},body:bytes});
+      const res=await fetch(EAR+'/live'+LQ(q||''),{method:'POST',headers:{'content-type':'application/octet-stream'},body:bytes});
       const body=await res.json();
       if(!body.ok){ st.textContent=body.error||'ear failed'; return; }
       if(body.final && body.text && body.text.trim()){
