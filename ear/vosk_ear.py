@@ -11,6 +11,7 @@ import json
 import multiprocessing as mp
 import os
 import queue
+import re
 import subprocess
 import tempfile
 import threading
@@ -271,6 +272,17 @@ def _live_job(model, state: dict, op: str, pcm: bytes) -> dict:
     return {"final": False, "text": "", "partial": partial, "payload": payload}
 
 
+#: Streams kept at once. The one idle longest is let go past this many.
+MAX_STREAMS = 32
+_SESSION_OK = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+
+
+def session_of(value: str | None) -> str:
+    """A caller's stream name. Empty means the shared stream old callers use."""
+    value = (value or "").strip()
+    return value if _SESSION_OK.match(value) else ""
+
+
 def _ear_worker(model_path: str, in_q, out_q) -> None:
     """Own process. If the recognizer aborts, the HTTP door stays up."""
     from vosk import Model, SetLogLevel  # type: ignore
@@ -283,29 +295,35 @@ def _ear_worker(model_path: str, in_q, out_q) -> None:
             job = in_q.get()
             if job is None:
                 return
-            out_q.put(("reply", job[0], {"error": str(exc)}))
+            out_q.put(("reply", job[0], job[1], {"error": str(exc)}))
         return
-    state: dict = {"rec": None, "held": 0}
+    streams: dict[str, dict] = {}
     while True:
         job = in_q.get()
         if job is None:
             return
-        jid, op, pcm = job
+        jid, sid, op, pcm = job
+        state = streams.pop(sid, None) or {"rec": None, "held": 0}
+        streams[sid] = state  # most recently used last
+        while len(streams) > MAX_STREAMS:
+            streams.pop(next(iter(streams)))
         try:
             reply = _live_job(model, state, op, pcm or b"")
         except Exception:  # noqa: BLE001
             state["rec"] = None
             state["held"] = 0
             reply = {"final": False, "text": "", "partial": "", "payload": {}}
-        out_q.put(("reply", jid, reply))
+        out_q.put(("reply", jid, sid, reply))
 
 
 class LiveHub:
     """The parent side of the live worker.
 
-    One reader thread takes every reply off the worker's queue and hands it to
-    the post waiting for it. A post that gave up waiting leaves its job behind;
-    when that late reply lands with words, it is held and delivered on the next
+    Each caller has its own stream, named by the session it sends; callers
+    that send none share one stream, as before. One reader thread takes every
+    reply off the worker's queue and hands it to the post waiting for it. A
+    post that gave up waiting leaves its job behind; when that late reply lands
+    with words, it is held for that same stream and delivered on its next
     reply. Nothing the worker heard is thrown away.
     """
 
@@ -318,7 +336,7 @@ class LiveHub:
         self._next = 0
         self._waiting: set[int] = set()
         self._replies: dict[int, dict] = {}
-        self._late: list[dict] = []
+        self._late: dict[str, list[dict]] = {}
 
     def _ensure(self) -> None:
         with self._cv:
@@ -343,22 +361,22 @@ class LiveHub:
                 continue
             except (EOFError, OSError):
                 return
-            _kind, jid, reply = msg
+            _kind, jid, sid, reply = msg
             with self._cv:
                 if jid in self._waiting:
                     self._replies[jid] = reply
                     self._cv.notify_all()
                 elif reply.get("final") and str(reply.get("text") or "").strip():
-                    self._late.append(reply)
+                    self._late.setdefault(sid, []).append(reply)
 
-    def call(self, op: str, pcm: bytes, wait_s: float) -> tuple[int, dict | None]:
+    def call(self, sid: str, op: str, pcm: bytes, wait_s: float) -> tuple[int, dict | None]:
         self._ensure()
         with self._cv:
             self._next += 1
             jid = self._next
             self._waiting.add(jid)
             proc, in_q = self._proc, self._in
-        in_q.put((jid, op, pcm))
+        in_q.put((jid, sid, op, pcm))
         deadline = time.monotonic() + wait_s
         with self._cv:
             while jid not in self._replies:
@@ -381,10 +399,9 @@ class LiveHub:
         except Exception:  # noqa: BLE001
             pass
 
-    def take_late(self) -> list[dict]:
+    def take_late(self, sid: str) -> list[dict]:
         with self._cv:
-            late, self._late = self._late, []
-        return late
+            return self._late.pop(sid, [])
 
 
 _hub: LiveHub | None = None
@@ -409,20 +426,21 @@ def _quiet_packet() -> dict:
     }
 
 
-def live_hear(pcm: bytes, reset: bool = False, end: bool = False) -> dict:
-    """Live PCM into Vosk. Not a tape. Not a clip."""
+def live_hear(pcm: bytes, reset: bool = False, end: bool = False, session: str = "") -> dict:
+    """Live PCM into Vosk. Not a tape. Not a clip. One stream per session."""
     if seat_model() is None:
         return {"ok": False, "seated": False, "error": _model_error, "engine": "vosk"}
+    sid = session_of(session)
     op = "reset" if reset else "end" if end else "pcm"
     hub = _live_hub()
     try:
-        jid, reply = hub.call(op, pcm or b"", END_WAIT_S if end else LIVE_WAIT_S)
+        jid, reply = hub.call(sid, op, pcm or b"", END_WAIT_S if end else LIVE_WAIT_S)
     except Exception:  # noqa: BLE001
         hub.restart()
         return _quiet_packet()
     if reply is not None and reply.get("error"):
         return {"ok": False, "seated": False, "error": reply["error"], "engine": "vosk"}
-    finals = hub.take_late()
+    finals = hub.take_late(sid)
     if reply is not None and reply.get("final"):
         finals.append(reply)
     if finals:
@@ -501,7 +519,7 @@ class Ear(BaseHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "content-type,authorization")
+        self.send_header("Access-Control-Allow-Headers", "content-type,authorization,x-filament-session")
         self.end_headers()
 
     def do_GET(self) -> None:  # noqa: N802
@@ -602,7 +620,8 @@ class Ear(BaseHTTPRequestHandler):
                 except Exception as exc:  # noqa: BLE001
                     self._json(400, {"ok": False, "error": str(exc)})
                     return
-            result = live_hear(pcm, reset=reset, end=end)
+            session = params.get("session") or self.headers.get("X-Filament-Session") or ""
+            result = live_hear(pcm, reset=reset, end=end, session=session)
             self._json(200 if result.get("ok") else 503, result)
             return
 
