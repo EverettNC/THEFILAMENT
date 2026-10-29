@@ -13,6 +13,8 @@ import os
 import queue
 import subprocess
 import tempfile
+import threading
+import time
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -200,9 +202,78 @@ def _live_packet(
     return dress(body, payload or {})
 
 
-def _kaldi_worker(model_path: str, in_q, out_q) -> None:
-    """Own process. If Kaldi aborts, the HTTP door stays up."""
-    from vosk import KaldiRecognizer, Model, SetLogLevel  # type: ignore
+#: How long one /live post waits for the worker before it answers without it.
+#: A reply that lands after this is not thrown away: a final is held for the
+#: next reply on the same stream, so no final is ever lost.
+LIVE_WAIT_S = float(os.environ.get("FILAMENT_LIVE_WAIT_S", "2.5"))
+#: An end post waits for its final to land, up to this long, while the worker lives.
+END_WAIT_S = float(os.environ.get("FILAMENT_END_WAIT_S", "120"))
+#: Fast talk fills one post. Feed the recognizer in 4000-byte bites so it can endpoint.
+#: Four seconds without an endpoint balloons the lattice and the ear goes dumb.
+HOLD_MAX = 16000 * 2 * 4
+CHUNK = 4000
+
+
+def _join_finals(finals: list[dict]) -> dict:
+    texts = [str(p.get("text") or "").strip() for p in finals]
+    text = " ".join(t for t in texts if t)
+    result: list = []
+    for p in finals:
+        result.extend(p.get("result") or [])
+    payload = {"text": text, "result": result}
+    return {"final": True, "text": text, "partial": "", "payload": payload}
+
+
+def _live_job(model, state: dict, op: str, pcm: bytes) -> dict:
+    """One /live post, in the worker. Every bite of audio is heard; no final is dropped."""
+    from vosk import KaldiRecognizer  # type: ignore
+
+    def fresh():
+        rec = KaldiRecognizer(model, 16000)
+        rec.SetWords(True)
+        return rec
+
+    if op == "reset" or state.get("rec") is None:
+        state["rec"] = fresh()
+        state["held"] = 0
+        if op == "reset" and not pcm:
+            return {"final": False, "text": "", "partial": "", "payload": {}}
+    rec = state["rec"]
+    finals: list[dict] = []
+    for i in range(0, len(pcm), CHUNK):
+        piece = pcm[i : i + CHUNK]
+        if rec.AcceptWaveform(piece):
+            finals.append(json.loads(rec.Result() or "{}"))
+            rec = state["rec"] = fresh()
+            state["held"] = 0
+            continue
+        state["held"] += len(piece)
+        if state["held"] >= HOLD_MAX:
+            try:
+                rec.AcceptWaveform(SILENCE_TAIL)
+            except Exception:  # noqa: BLE001
+                pass
+            finals.append(json.loads(rec.FinalResult() or "{}"))
+            rec = state["rec"] = fresh()
+            state["held"] = 0
+    if op == "end":
+        try:
+            rec.AcceptWaveform(SILENCE_TAIL)
+        except Exception:  # noqa: BLE001
+            pass
+        finals.append(json.loads(rec.FinalResult() or "{}"))
+        state["rec"] = None
+        state["held"] = 0
+    if finals:
+        return _join_finals(finals)
+    payload = json.loads(rec.PartialResult() or "{}")
+    partial = (payload.get("partial") or "").strip()
+    return {"final": False, "text": "", "partial": partial, "payload": payload}
+
+
+def _ear_worker(model_path: str, in_q, out_q) -> None:
+    """Own process. If the recognizer aborts, the HTTP door stays up."""
+    from vosk import Model, SetLogLevel  # type: ignore
 
     SetLogLevel(-1)
     try:
@@ -212,140 +283,154 @@ def _kaldi_worker(model_path: str, in_q, out_q) -> None:
             job = in_q.get()
             if job is None:
                 return
-            out_q.put({"ok": False, "seated": False, "error": str(exc), "engine": "vosk"})
+            out_q.put(("reply", job[0], {"error": str(exc)}))
         return
-    rec = None
-    held = 0
+    state: dict = {"rec": None, "held": 0}
     while True:
         job = in_q.get()
         if job is None:
             return
         jid, op, pcm = job
         try:
-            if op == "reset" or rec is None:
-                rec = KaldiRecognizer(model, 16000)
-                rec.SetWords(True)
-                held = 0
-                if op == "reset":
-                    out_q.put(_live_packet(False, job=jid))
-                    continue
-            if op == "end":
-                text = ""
-                payload: dict = {}
-                if rec is not None:
-                    try:
-                        rec.AcceptWaveform(SILENCE_TAIL)
-                    except Exception:  # noqa: BLE001
-                        pass
-                    payload = json.loads(rec.FinalResult() or "{}")
-                    text = (payload.get("text") or "").strip()
-                    rec = None
-                    held = 0
-                out_q.put(_live_packet(True, text=text, payload=payload, job=jid))
-                continue
-            if not pcm:
-                out_q.put(_live_packet(False, job=jid))
-                continue
-            # Fast talk fills one POST. Feed Kaldi in 4000-byte bites so it can endpoint.
-            # Four seconds without an endpoint balloons the lattice and the ear goes dumb.
-            HOLD_MAX = 16000 * 2 * 4
-            CHUNK = 4000
-            forced = False
-            accepted = False
-            payload: dict = {}
-            for i in range(0, len(pcm), CHUNK):
-                piece = pcm[i : i + CHUNK]
-                if rec.AcceptWaveform(piece):
-                    payload = json.loads(rec.Result() or "{}")
-                    accepted = True
-                    break
-                held += len(piece)
-                if held >= HOLD_MAX:
-                    try:
-                        rec.AcceptWaveform(SILENCE_TAIL)
-                    except Exception:  # noqa: BLE001
-                        pass
-                    payload = json.loads(rec.FinalResult() or "{}")
-                    forced = True
-                    break
-            if accepted or forced:
-                text = (payload.get("text") or "").strip()
-                out_q.put(_live_packet(True, text=text, payload=payload, job=jid))
-                rec = KaldiRecognizer(model, 16000)
-                rec.SetWords(True)
-                held = 0
-            else:
-                payload = json.loads(rec.PartialResult() or "{}")
-                partial = (payload.get("partial") or "").strip()
-                out_q.put(_live_packet(False, partial=partial, payload=payload, job=jid))
+            reply = _live_job(model, state, op, pcm or b"")
         except Exception:  # noqa: BLE001
-            rec = None
-            held = 0
-            out_q.put(_live_packet(False, job=jid))
+            state["rec"] = None
+            state["held"] = 0
+            reply = {"final": False, "text": "", "partial": "", "payload": {}}
+        out_q.put(("reply", jid, reply))
 
 
-def _ensure_live_worker() -> None:
-    global _live_in, _live_out, _live_proc
-    if _live_proc is not None and _live_proc.is_alive():
-        return
-    ctx = mp.get_context("spawn")
-    _live_in = ctx.Queue()
-    _live_out = ctx.Queue()
-    _live_proc = ctx.Process(
-        target=_kaldi_worker,
-        args=(MODEL_PATH, _live_in, _live_out),
-        daemon=True,
-    )
-    _live_proc.start()
+class LiveHub:
+    """The parent side of the live worker.
+
+    One reader thread takes every reply off the worker's queue and hands it to
+    the post waiting for it. A post that gave up waiting leaves its job behind;
+    when that late reply lands with words, it is held and delivered on the next
+    reply. Nothing the worker heard is thrown away.
+    """
+
+    def __init__(self, model_path: str) -> None:
+        self.model_path = model_path
+        self._cv = threading.Condition()
+        self._proc = None
+        self._in = None
+        self._gen = 0
+        self._next = 0
+        self._waiting: set[int] = set()
+        self._replies: dict[int, dict] = {}
+        self._late: list[dict] = []
+
+    def _ensure(self) -> None:
+        with self._cv:
+            if self._proc is not None and self._proc.is_alive():
+                return
+            ctx = mp.get_context("spawn")
+            in_q = ctx.Queue()
+            out_q = ctx.Queue()
+            proc = ctx.Process(target=_ear_worker, args=(self.model_path, in_q, out_q), daemon=True)
+            proc.start()
+            self._gen += 1
+            self._proc, self._in = proc, in_q
+            threading.Thread(target=self._read, args=(out_q, self._gen), daemon=True).start()
+
+    def _read(self, out_q, gen: int) -> None:
+        while True:
+            try:
+                msg = out_q.get(timeout=1.0)
+            except queue.Empty:
+                if gen != self._gen:
+                    return
+                continue
+            except (EOFError, OSError):
+                return
+            _kind, jid, reply = msg
+            with self._cv:
+                if jid in self._waiting:
+                    self._replies[jid] = reply
+                    self._cv.notify_all()
+                elif reply.get("final") and str(reply.get("text") or "").strip():
+                    self._late.append(reply)
+
+    def call(self, op: str, pcm: bytes, wait_s: float) -> tuple[int, dict | None]:
+        self._ensure()
+        with self._cv:
+            self._next += 1
+            jid = self._next
+            self._waiting.add(jid)
+            proc, in_q = self._proc, self._in
+        in_q.put((jid, op, pcm))
+        deadline = time.monotonic() + wait_s
+        with self._cv:
+            while jid not in self._replies:
+                left = deadline - time.monotonic()
+                if left <= 0 or not proc.is_alive():
+                    self._waiting.discard(jid)
+                    return jid, None
+                self._cv.wait(min(left, 0.5))
+            self._waiting.discard(jid)
+            return jid, self._replies.pop(jid)
+
+    def restart(self) -> None:
+        with self._cv:
+            proc = self._proc
+            self._proc = None
+            self._gen += 1
+        try:
+            if proc is not None:
+                proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def take_late(self) -> list[dict]:
+        with self._cv:
+            late, self._late = self._late, []
+        return late
+
+
+_hub: LiveHub | None = None
+
+
+def _live_hub() -> LiveHub:
+    global _hub
+    if _hub is None:
+        _hub = LiveHub(MODEL_PATH)
+    return _hub
+
+
+def _quiet_packet() -> dict:
+    return {
+        "ok": True,
+        "final": False,
+        "text": "",
+        "partial": "",
+        "words": [],
+        "engine": "vosk",
+        "seated": True,
+    }
 
 
 def live_hear(pcm: bytes, reset: bool = False, end: bool = False) -> dict:
     """Live PCM into Vosk. Not a tape. Not a clip."""
-    global _live_proc, _live_in, _live_out, _live_job
     if seat_model() is None:
         return {"ok": False, "seated": False, "error": _model_error, "engine": "vosk"}
-    _ensure_live_worker()
     op = "reset" if reset else "end" if end else "pcm"
-    _live_job += 1
-    jid = _live_job
+    hub = _live_hub()
     try:
-        _live_in.put((jid, op, pcm or b""))
-        deadline = __import__("time").time() + 2.5
-        while True:
-            left = deadline - __import__("time").time()
-            if left <= 0:
-                raise queue.Empty
-            got = _live_out.get(timeout=left)
-            if int(got.get("job") or 0) == jid:
-                return got
-    except queue.Empty:
-        return {
-            "ok": True,
-            "final": False,
-            "text": "",
-            "partial": "",
-            "words": [],
-            "engine": "vosk",
-            "seated": True,
-        }
+        jid, reply = hub.call(op, pcm or b"", END_WAIT_S if end else LIVE_WAIT_S)
     except Exception:  # noqa: BLE001
-        try:
-            if _live_proc is not None:
-                _live_proc.kill()
-        except Exception:  # noqa: BLE001
-            pass
-        _live_proc = None
-        _live_in = None
-        _live_out = None
-        return {
-            "ok": True,
-            "final": False,
-            "text": "",
-            "partial": "",
-            "words": [],
-            "engine": "vosk",
-            "seated": True,
-        }
+        hub.restart()
+        return _quiet_packet()
+    if reply is not None and reply.get("error"):
+        return {"ok": False, "seated": False, "error": reply["error"], "engine": "vosk"}
+    finals = hub.take_late()
+    if reply is not None and reply.get("final"):
+        finals.append(reply)
+    if finals:
+        joined = _join_finals([f.get("payload") or {"text": f.get("text")} for f in finals])
+        return _live_packet(True, text=joined["text"], payload=joined["payload"], job=jid)
+    if reply is None:
+        return _quiet_packet()
+    return _live_packet(False, partial=reply.get("partial") or "", payload=reply.get("payload") or {}, job=jid)
 
 
 def extract_file(headers: dict[str, str], body: bytes) -> bytes:
