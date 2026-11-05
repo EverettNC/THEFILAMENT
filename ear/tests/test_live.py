@@ -3,7 +3,7 @@ and AlphaVox's own verified phrases (tests/audio, from EverettNC/AlphaVox
 data/phrases/alphavox_verified, resampled to 16 kHz mono).
 
 Run from the repo root:
-    VOSK_MODEL_PATH=~/models/vosk-model-en-us-0.22-lgraph \
+    VOSK_MODEL_PATH=~/models/vosk-model-en-us-0.22 \
     <python with the ear's packages> -m unittest discover -s ear/tests -v
 
 If the model is not seated, these tests say so and are not run.
@@ -20,7 +20,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 AUDIO = HERE / "audio"
-MODEL = os.environ.get("VOSK_MODEL_PATH") or str(Path.home() / "models" / "vosk-model-en-us-0.22-lgraph")
+MODEL = os.environ.get("VOSK_MODEL_PATH") or str(Path.home() / "models" / "vosk-model-en-us-0.22")
 os.environ["VOSK_MODEL_PATH"] = MODEL
 
 PHRASES = {

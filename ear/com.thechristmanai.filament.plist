@@ -14,7 +14,7 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>VOSK_MODEL_PATH</key>
-        <string>/Users/EverettN/models/vosk-model-en-us-0.22-lgraph</string>
+        <string>/Users/EverettN/models/vosk-model-en-us-0.22</string>
         <key>PATH</key>
         <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
     </dict>

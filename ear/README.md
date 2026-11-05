@@ -2,14 +2,14 @@
 
 Door **4850**. Own house. Not Whole House. Not the Bench.
 
-Model: **vosk-model-en-us-0.22-lgraph**  
+Model: **vosk-model-en-us-0.22**  
 Accurate universal English (callcenter + wideband). Appen Kaldi. Dynamic graph.  
 Not the small 0.15. Whisper is not in this body.
 
 On Everett's machine the model already lives unpacked:
 
 ```
-/Users/EverettN/models/vosk-model-en-us-0.22-lgraph
+/Users/EverettN/models/vosk-model-en-us-0.22
 ```
 
 The ear looks there first (`VOSK_MODEL_PATH`, then Downloads, then that path, then `./models/…`). Whisper is not a fallback. If 4850 dies, it restarts. It does not hand the ear to something else.

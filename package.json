@@ -7,7 +7,7 @@
     "nf3": "0.3.17"
   },
   "scripts": {
-    "dev": "cd ear && VOSK_MODEL_PATH=/Users/EverettN/models/vosk-model-en-us-0.22-lgraph /Users/EverettN/mcp-media-ingestor/.venv/bin/python vosk_ear.py",
+    "dev": "cd ear && VOSK_MODEL_PATH=/Users/EverettN/models/vosk-model-en-us-0.22 /Users/EverettN/mcp-media-ingestor/.venv/bin/python vosk_ear.py",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "typecheck": "tsc --noEmit",
