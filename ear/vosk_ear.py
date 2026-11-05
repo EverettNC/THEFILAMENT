@@ -25,9 +25,9 @@ from mouth import CONF_FLOOR, dress, load_carbon, save_carbon, shape_words
 from board import add_family, add_residual, snapshot
 
 DOOR = int(os.environ.get("FILAMENT_EAR_PORT", "4850"))
-HOME_MODEL = "/Users/EverettN/Downloads/vosk-model-en-us-0.22-lgraph"
-HOME_UNZIP = "/Users/EverettN/models/vosk-model-en-us-0.22-lgraph"
-REPO_MODEL = str(Path(__file__).resolve().parent.parent / "models" / "vosk-model-en-us-0.22-lgraph")
+HOME_MODEL = "/Users/EverettN/Downloads/vosk-model-en-us-0.22"
+HOME_UNZIP = "/Users/EverettN/models/vosk-model-en-us-0.22"
+REPO_MODEL = str(Path(__file__).resolve().parent.parent / "models" / "vosk-model-en-us-0.22")
 
 
 def resolve_model_path() -> str:
