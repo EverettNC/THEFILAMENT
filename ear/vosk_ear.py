@@ -23,6 +23,7 @@ from urllib.parse import unquote, urlparse
 
 from mouth import CONF_FLOOR, dress, load_carbon, save_carbon, shape_words
 from board import add_family, add_residual, snapshot
+from engine import ENGINE
 
 DOOR = int(os.environ.get("FILAMENT_EAR_PORT", "4850"))
 HOME_MODEL = "/Users/EverettN/Downloads/vosk-model-en-us-0.22"
@@ -153,7 +154,7 @@ def hear(pcm: bytes) -> dict:
             "words": words,
             "duration": len(pcm) / (16000 * 2),
             "language": "en",
-            "engine": "vosk",
+            "engine": ENGINE,
             "organ": "filament",
             "cloud": False,
             "seated": True,
@@ -179,7 +180,7 @@ def _live_packet(
         "text": text,
         "partial": partial,
         "words": words_from(payload or {}),
-        "engine": "vosk",
+        "engine": ENGINE,
         "organ": "filament",
         "cloud": False,
         "seated": True,
@@ -212,7 +213,7 @@ def _join_finals(finals: list[dict]) -> dict:
 
 def _live_job(model, state: dict, op: str, pcm: bytes) -> dict:
     """One /live post, in the worker. Every bite of audio is heard; no final is dropped."""
-    from vosk import KaldiRecognizer  # type: ignore
+    from engine import KaldiRecognizer
 
     def fresh():
         rec = KaldiRecognizer(model, 16000)
@@ -270,7 +271,7 @@ def session_of(value: str | None) -> str:
 
 def _tape_job(model, pcm: bytes) -> dict:
     """A whole tape for /stt: its own recognizer, 0.5 s of silence after it."""
-    from vosk import KaldiRecognizer  # type: ignore
+    from engine import KaldiRecognizer
 
     rec = KaldiRecognizer(model, 16000)
     rec.SetWords(True)
@@ -292,7 +293,7 @@ def _ear_worker(model_path: str, in_q, out_q) -> None:
     """Own process, and the only place the model sits. If the recognizer
     aborts, the HTTP door stays up."""
     try:
-        from vosk import Model, SetLogLevel  # type: ignore
+        from engine import Model, SetLogLevel
 
         SetLogLevel(-1)
         model = Model(model_path)
@@ -462,7 +463,7 @@ def _quiet_packet() -> dict:
         "text": "",
         "partial": "",
         "words": [],
-        "engine": "vosk",
+        "engine": ENGINE,
         "seated": True,
     }
 
@@ -470,7 +471,7 @@ def _quiet_packet() -> dict:
 def live_hear(pcm: bytes, reset: bool = False, end: bool = False, session: str = "") -> dict:
     """Live PCM into Vosk. Not a tape. Not a clip. One stream per session."""
     if seat_model() is None:
-        return {"ok": False, "seated": False, "error": _model_error, "engine": "vosk"}
+        return {"ok": False, "seated": False, "error": _model_error, "engine": ENGINE}
     sid = session_of(session)
     op = "reset" if reset else "end" if end else "pcm"
     hub = _live_hub()
@@ -480,7 +481,7 @@ def live_hear(pcm: bytes, reset: bool = False, end: bool = False, session: str =
         hub.restart()
         return _quiet_packet()
     if reply is not None and reply.get("error"):
-        return {"ok": False, "seated": False, "error": reply["error"], "engine": "vosk"}
+        return {"ok": False, "seated": False, "error": reply["error"], "engine": ENGINE}
     finals = hub.take_late(sid)
     if reply is not None and reply.get("final"):
         finals.append(reply)
@@ -590,7 +591,7 @@ class Ear(BaseHTTPRequestHandler):
                 {
                     "ok": seated,
                     "seated": seated,
-                    "engine": "vosk",
+                    "engine": ENGINE,
                     "organ": "filament",
                     "github": "https://github.com/EverettNC/THEFILAMENT",
                     "door": DOOR,
@@ -641,7 +642,7 @@ class Ear(BaseHTTPRequestHandler):
             self._json(200, {"ok": True, "row": row, **snapshot()})
             return
         if seat_model() is None:
-            self._json(503, {"ok": False, "seated": False, "error": _model_error, "engine": "vosk"})
+            self._json(503, {"ok": False, "seated": False, "error": _model_error, "engine": ENGINE})
             return
         length = int(self.headers.get("Content-Length") or 0)
         if length > 32 * 1024 * 1024:
